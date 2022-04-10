@@ -37,7 +37,7 @@ class WSNAreaWidget(Canvas):
         self._node_elements = self._node_elements
 
     def clear_est_values(self):
-        [self.delete(est_val_element) for est_val_element in self._est_val_elements]
+        [self.delete(est_val_element[0], est_val_element[1]) for est_val_element in self._est_val_elements]
 
     def set_est_values(self, est_vals: np.ndarray):
         for est_val in est_vals:
