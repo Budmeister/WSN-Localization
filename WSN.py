@@ -28,7 +28,7 @@ class WSN:
         self.anchor_nodes = set()
         self.known_nodes = set()
 
-        self.time = 0
+        self.t0 = 50
 
     def reset_nodes(self):
         self.nodes = np.random.default_rng().random(size=(self.N, 2)) * self.size
@@ -45,7 +45,7 @@ class WSN:
             raise ValueError("Invalid type for anchor_nodes. Should be Iterable or int.")
 
     # Get the results of transmitting from the given node
-    def transmit(self, i, r0):
+    def transmit(self, i, r0, t0=0):
         results = []
         total_time = 0
         for j in self.known_nodes:
@@ -56,7 +56,7 @@ class WSN:
             if pn > self.D:
                 continue
             # time = distance / rate
-            tn0 = pn / self.c
+            tn0 = pn / self.c + t0
             total_time = max(total_time, tn0)
             # Rearranged equation (8)
             Pr = self.Pt / (pn * 4 * np.pi * self.Fc / self.c) ** 2
@@ -69,11 +69,9 @@ class WSN:
                     Pr
                 )
             )
-        self.time += total_time
         return results
 
     def get_TDOA_H_and_b(self, results, *args, **kwargs):
-        time_offset = random.randint(0, 1000)
         r1, t10, no1, *_ = results[0]
 
         # No transpose, because "rn - r1" are being inserted as rows
@@ -150,7 +148,7 @@ class WSN:
                     # Do not try to estimate the location of an anchor node
                     continue
                 # results holds the known nodes within range of r0
-                results = self.transmit(i, r0)
+                results = self.transmit(i, r0, t0=self.t0 if method == "TDOA" else 0)
                 if len(results) < Nmin:
                     continue
                 
