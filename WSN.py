@@ -28,7 +28,7 @@ class WSN:
         self.anchor_nodes = set()
         self.known_nodes = set()
 
-        self.t0 = 50
+        self.t0 = 0
 
     def reset_nodes(self):
         self.nodes = np.random.default_rng().random(size=(self.N, 2)) * self.size
@@ -47,7 +47,6 @@ class WSN:
     # Get the results of transmitting from the given node
     def transmit(self, i, r0, t0=0):
         results = []
-        total_time = 0
         for j in self.known_nodes:
             if i == j:
                 continue
@@ -57,7 +56,6 @@ class WSN:
                 continue
             # time = distance / rate
             tn0 = pn / self.c + t0
-            total_time = max(total_time, tn0)
             # Rearranged equation (8)
             Pr = self.Pt / (pn * 4 * np.pi * self.Fc / self.c) ** 2
 
@@ -76,6 +74,7 @@ class WSN:
 
         # No transpose, because "rn - r1" are being inserted as rows
         H = np.array([rn - r1 for n, (rn, *_) in enumerate(results) if n != 0])
+        H = np.concatenate((H, np.transpose([[self.c * (tn0 - t10) for n, (rn, tn0, *_) in enumerate(results) if n != 0]])), 1)
         norm_r1_2 = np.dot(r1, r1)
         t10_2 = t10 ** 2
         # b = np.array([
@@ -83,9 +82,11 @@ class WSN:
         #     for n, (rn, tn0, no, *_) in enumerate(results) if n != 0
         # ]) * 0.5
         b = np.array([
-            [np.dot(rn, rn) - norm_r1_2 - self.c ** 2 * ((tn0 - t10) ** 2 + 2 * t10 * (tn0 - t10))]
+            # [np.dot(rn, rn) - norm_r1_2 - self.c ** 2 * ((tn0 - t10) ** 2 + 2 * t10 * (tn0 - t10))]
+            # [(self.c * (tn0 - t10)) **2 - norm_r1_2 - np.dot(rn, rn)]
+            [np.dot(rn, rn) - norm_r1_2 - self.c ** 2 * (tn0 - t10) ** 2]
             for n, (rn, tn0, no, *_) in enumerate(results) if n != 0
-        ])
+        ]) * 0.5
         return H, b
 
     def get_TOA_H_and_b(self, results, *args, **kwargs):
@@ -97,7 +98,7 @@ class WSN:
         t10_2 = t10 ** 2
         b = np.array([
             # [np.dot(rn, rn) - norm_r1_2 - self.c ** 2 * ((tn0 - t10) ** 2 + 2 * t10 * (tn0 - t10))]
-            [np.dot(rn, rn) - norm_r1_2 - self.c ** 2 * (tn0 ** 2 - t10_2)]
+            [norm_r1_2 - np.dot(rn, rn) + self.c ** 2 * (tn0 ** 2 - t10_2)]
             for n, (rn, tn0, no, *_) in enumerate(results) if n != 0
         ]) * 0.5
         return H, b
@@ -148,13 +149,13 @@ class WSN:
                     # Do not try to estimate the location of an anchor node
                     continue
                 # results holds the known nodes within range of r0
-                results = self.transmit(i, r0, t0=self.t0 if method == "TDOA" else 0)
+                results = self.transmit(i, r0, t0=self.t0 * 1e-8 if method == "TDOA" else 0)
                 if len(results) < Nmin:
                     continue
                 
                 H, b = get_H_and_b(results)
                 r0_est = np.matmul(np.linalg.pinv(H), b)
-                est_pos[i] = r0_est.flatten()
+                est_pos[i] = r0_est.flatten()[:2]   # TDOA returns a triple
                 self.known_nodes.add(i)
         return est_pos
 

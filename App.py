@@ -61,19 +61,29 @@ class App:
             ],
             [
                 ("c", 1e8, 3e8, 3e8),
-                ("Pt", 0, 10, 1)
+                ("Pt", 0, 10, 1),
+                ("t0", 0, 50, 0, 1)
             ]
         ]
+        def t0_command(num):
+            self.wsn.t0 = float(num)
+            self.localize("TDOA")
         for c, option_column in enumerate(option_columns):
             gridy = 2
             gridx = c * 2
-            for name, min, max, default in option_column:
+            for name, min, max, default, *others in option_column:
+                if len(others) > 0:
+                    resolution = others[0]
+                else:
+                    resolution = None
                 s_lbl = Label(self.root, text=name)
                 s_lbl.grid(row=gridy, column=gridx)
                 slider = Scale(self.root, from_=min, to=max, length=50 * zoom, tickinterval=(max - min) / 2, orient=HORIZONTAL)
                 slider.set(default)
                 option = Option(self.wsn, slider, name, min, max, default)
-                slider.config(command=option.command)
+                slider.config(command=option.command, resolution=resolution)
+                if name == "t0":
+                    slider.config(command=t0_command)
                 slider.grid(row=gridy, column=gridx+1)
                 gridy += 1
             
