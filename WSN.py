@@ -77,13 +77,8 @@ class WSN:
         H = np.concatenate((H, np.transpose([[self.c * (tn0 - t10) for n, (rn, tn0, *_) in enumerate(results) if n != 0]])), 1)
         norm_r1_2 = np.dot(r1, r1)
         t10_2 = t10 ** 2
-        # b = np.array([
-        #     [np.dot(rn, rn) - norm_r1_2 - self.c ** 2 * ((tn0 + time_offset) ** 2 - t10_2)]
-        #     for n, (rn, tn0, no, *_) in enumerate(results) if n != 0
-        # ]) * 0.5
         b = np.array([
             # [np.dot(rn, rn) - norm_r1_2 - self.c ** 2 * ((tn0 - t10) ** 2 + 2 * t10 * (tn0 - t10))]
-            # [(self.c * (tn0 - t10)) **2 - norm_r1_2 - np.dot(rn, rn)]
             [np.dot(rn, rn) - norm_r1_2 - self.c ** 2 * (tn0 - t10) ** 2]
             for n, (rn, tn0, no, *_) in enumerate(results) if n != 0
         ]) * 0.5
@@ -97,7 +92,6 @@ class WSN:
         norm_r1_2 = np.dot(r1, r1)
         t10_2 = t10 ** 2
         b = np.array([
-            # [np.dot(rn, rn) - norm_r1_2 - self.c ** 2 * ((tn0 - t10) ** 2 + 2 * t10 * (tn0 - t10))]
             [norm_r1_2 - np.dot(rn, rn) + self.c ** 2 * (tn0 ** 2 - t10_2)]
             for n, (rn, tn0, no, *_) in enumerate(results) if n != 0
         ]) * 0.5
