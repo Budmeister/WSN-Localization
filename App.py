@@ -2,6 +2,7 @@ from tkinter import *
 from WSN import *
 from WSNAreaWidget import WSNAreaWidget
 from global_funcs import *
+from wsn_eval import *
 
 class App:
     def __init__(self):
@@ -22,6 +23,8 @@ class App:
         est_pos = self.wsn.localize(method)
         self.wsn_area.clear_est_values()
         self.wsn_area.set_est_values(est_pos)
+        success, error = err(est_pos, self.wsn.nodes, self.wsn.anchor_nodes)
+        print(success, error)
 
     def show(self):
         if self.running:
