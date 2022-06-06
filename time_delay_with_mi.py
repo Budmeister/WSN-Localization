@@ -49,74 +49,9 @@ def solve_ode_with_time_delay(A, B, time_delay, s0, t_range, dt):
     sol = solve_ivp(F, t_range, s0, t_eval=t_eval, receive_partial_sol=True, args=())
     return sol.y
 
-if __name__ == "__main__":
-    # "de" or "ar"
-    correlation_type = "ar"
-    do_interactive_graph = False
-
-    if correlation_type == "de":
-        A = np.array(
-            [[-0.1, 0],
-            [0, 0]]
-        )
-        B = np.array(
-            [[0, 0],
-            [-0.4, -0.1]]
-        )
-        time_delay = 5
-        s0 = np.array([1, 0.5])
-        outer_sol = PartialSolution((0, s0))
-
-        t_range = (0, 40)
-        dt = 0.1
-        t_eval = np.arange(*t_range, dt)
-
-        xs, ys = solve_ode_with_time_delay(A, B, time_delay, s0, t_range, dt)
-        # print(partial_sol.known_vals)
-        print([(a, b, len(a), len(b)) for (a, b) in ((np.array([kv[0] for kv in outer_sol.known_vals]), t_eval),)])
-        plt.figure()
-        plt.plot(t_eval, [outer_sol(t) for t in t_eval], label="partial_sol")
-        plt.plot(t_eval, np.transpose((xs, ys)), label="real")
-        plt.legend()
-        plt.show(block=False)
-        std = 0.1
-        xs = xs + np.random.normal(size=xs.shape, scale=std)
-        ys = ys + np.random.normal(size=xs.shape, scale=std)
-    elif correlation_type == "ar":
-        tau = 5
-        dt = 1
-
-        t_range = (0, 1000)
-        size = t_range[1] - t_range[0]
-        t_eval = np.arange(*t_range, dt)
-        xs = np.empty(shape=(size, 2))
-        std = 1
-        xs[:tau] = np.random.normal(size=(tau, 2), scale=std)
-        
-        b, c = np.random.uniform(-1, 1, size=2)
-        dprint(b, c)
-        A = np.array(
-            [[0, c],
-             [b, 0]]
-        )
-        for i in range(tau, size):
-            xs[i] = np.matmul(A, xs[i-tau]) + np.random.normal(size=2, scale=std)
-
-        plt.figure()
-        plt.plot(t_eval, xs)
-        plt.show(block=False)
-
-        xs, ys = xs.T
-    else:
-        print("Invalid correlation type:", correlation_type)
-        quit()
-    
-    num_shifts = 40
-    ts: np.ndarray = t_eval
-    mis = []
-    shifts = np.arange(-num_shifts // 2, num_shifts // 2, 1)
-
+def mi_shift(xs, shifts, do_interactive_graph=False):
     if do_interactive_graph:
+        from matplotlib import pyplot as plt
         plt.ion()
         fig1, ax1 = plt.subplots()
 
@@ -126,7 +61,6 @@ if __name__ == "__main__":
         ax1.legend()
 
         fig2, ax2 = plt.subplots()
-        # mis = np.zeros(shape=shifts.shape)
         miline, = ax2.plot(shifts * dt, np.concatenate((mis, np.zeros(len(shifts) - len(mis)))))
         ax2.set_ylim((-2, 6))
 
@@ -174,6 +108,81 @@ if __name__ == "__main__":
             miline.set_ydata(np.concatenate((mis, np.zeros(len(shifts) - len(mis)))))
             fig2.canvas.draw()
             fig2.canvas.flush_events()
+    return mis
+
+def get_ar_data(samples, b=None, c=None, tau=5, std=1):
+    xs = np.empty(shape=(samples, 2))
+    xs[:tau] = np.random.normal(size=(tau, 2), scale=std)
+    
+    if b is None:
+        b = np.random.uniform(-1, 1)
+    if c is None:
+        c = np.random.uniform(-1, 1)
+    dprint(b, c)
+    A = np.array(
+        [[0, c],
+         [b, 0]]
+    )
+    for i in range(tau, samples):
+        xs[i] = np.matmul(A, xs[i-tau]) + np.random.normal(size=2, scale=std)
+    return xs
+
+if __name__ == "__main__":
+    # "de" or "ar"
+    correlation_type = "ar"
+    do_interactive_graph = False
+
+    if correlation_type == "de":
+        A = np.array(
+            [[-0.1, 0],
+            [0, 0]]
+        )
+        B = np.array(
+            [[0, 0],
+            [-0.4, -0.1]]
+        )
+        time_delay = 5
+        s0 = np.array([1, 0.5])
+        outer_sol = PartialSolution((0, s0))
+
+        t_range = (0, 40)
+        dt = 0.1
+        t_eval = np.arange(*t_range, dt)
+
+        xs, ys = solve_ode_with_time_delay(A, B, time_delay, s0, t_range, dt)
+        print([(a, b, len(a), len(b)) for (a, b) in ((np.array([kv[0] for kv in outer_sol.known_vals]), t_eval),)])
+        plt.figure()
+        plt.plot(t_eval, [outer_sol(t) for t in t_eval], label="partial_sol")
+        plt.plot(t_eval, np.transpose((xs, ys)), label="real")
+        plt.legend()
+        plt.show(block=False)
+        std = 0.1
+        xs = xs + np.random.normal(size=xs.shape, scale=std)
+        ys = ys + np.random.normal(size=xs.shape, scale=std)
+    elif correlation_type == "ar":
+        tau = 5
+        dt = 1
+        std=1
+
+        t_range = (0, 1000)
+        size = t_range[1] - t_range[0]
+        t_eval = np.arange(*t_range, dt)
+        xs = get_ar_data(b=1, samples=size, tau=tau, std=std)
+
+        plt.figure()
+        plt.plot(t_eval, xs)
+        plt.show(block=False)
+
+        xs, ys = xs.T
+    else:
+        print("Invalid correlation type:", correlation_type)
+        quit()
+    
+    num_shifts = 40
+    ts: np.ndarray = t_eval
+    mis = []
+    shifts = np.arange(-num_shifts // 2, num_shifts // 2, 1)
+    mis = mi_shift(xs, shifts, do_interactive_graph=do_interactive_graph)
 
     if not do_interactive_graph:
         plt.figure()
