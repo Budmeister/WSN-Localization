@@ -51,8 +51,9 @@ if __name__ == "__main__":
 
 
     # Case B
+    s0 = np.array([0.5, 1])
     partial_sol = PartialSolution((0, s0))
-    range_b = (0, 10)
+    range_b = (0, 40)
     # A = get_nonnormal_A(a=4.5)
     # A = np.array(
     #     [[-1, 0],
@@ -62,6 +63,7 @@ if __name__ == "__main__":
         [[0, 1],
          [-1, 0]]
     )
+    A = get_nonnormal_A(-0.4)
     time_delay = 0
     t_eval = np.arange(*range_b, 0.0001)
     sol_b = solve_ivp(F_lin, range_b, s0, t_eval=t_eval)
@@ -69,12 +71,12 @@ if __name__ == "__main__":
 
     # Case C
     partial_sol = PartialSolution((0, s0))
-    range_c = (0, 20)
+    range_c = (0, 40)
     # A = get_nonnormal_A(a=10)
-    A = np.array(
-        [[-1, -1],
-         [1, -1]]
-    )
+    # A = np.array(
+    #     [[-1, -1],
+    #      [1, -1]]
+    # )
     # A = np.array(
     #     [[0, 1],
     #      [-1, 0]]

@@ -1,4 +1,33 @@
 
+def x_polate(known_vals, t, i=0, extrapolate_left=False, extrapolate_right=False):
+    if len(known_vals) == 0:
+        raise ValueError
+    if len(known_vals) == 1:
+        return known_vals[0][1], i
+    if i >= len(known_vals) - 1:
+        i = len(known_vals) - 2
+    if i < 0:
+        i = 0
+    while known_vals[i+1][0] <= t:
+        i += 1
+        if i == len(known_vals) - 1:
+            if extrapolate_right:
+                i -= 1
+                break
+            else:
+                return known_vals[-1][1], i
+    while known_vals[i][0] > t:
+        i -= 1
+        if i == -1:
+            if extrapolate_left:
+                i += 1
+                break
+            else:
+                return known_vals[0][1], i
+    diff_s = known_vals[i+1][1] - known_vals[i][1]
+    diff_t = known_vals[i+1][0] - known_vals[i][0]
+    t -= known_vals[i][0]
+    return t / diff_t * diff_s + known_vals[i][1], i
 
 class PartialSolution:
     def __init__(self, initial_value : tuple = None, extrapolate_left=False, extrapolate_right=False):
@@ -21,27 +50,5 @@ class PartialSolution:
             self.known_vals.append((t, s))
     
     def __call__(self, t):
-        if len(self.known_vals) == 1:
-            return self.known_vals[0][1]
-        if self.i >= len(self.known_vals) - 1:
-            self.i = len(self.known_vals) - 2
-        if self.i < 0:
-            self.i = 0
-        while self.known_vals[self.i+1][0] <= t:
-            self.i += 1
-            if self.i == len(self.known_vals) - 1:
-                if self.extrapolate_right:
-                    break
-                else:
-                    return self.known_vals[-1][1]
-        while self.known_vals[self.i][0] > t:
-            self.i -= 1
-            if self.i == -1:
-                if self.extrapolate_left:
-                    break
-                else:
-                    return self.known_vals[0][1]
-        diff_s = self.known_vals[self.i+1][1] - self.known_vals[self.i][1]
-        diff_t = self.known_vals[self.i+1][0] - self.known_vals[self.i][0]
-        t -= self.known_vals[self.i][0]
-        return t / diff_t * diff_s + self.known_vals[self.i][1]
+        retval, self.i = x_polate(self.known_vals, t, self.i, self.extrapolate_left, self.extrapolate_right)
+        return retval
