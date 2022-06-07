@@ -1,6 +1,8 @@
+from math import ceil
 from typing import Iterable
 import numpy as np
 import random
+from mutual_information import *
 
 def dist2(node1: np.ndarray, node2: np.ndarray):
     diff = node2 - node1
@@ -17,7 +19,7 @@ def norm(node: np.ndarray):
         raise ValueError()
 
 class WSN:
-    def __init__(self, size, N, Fc=2.4e9, D=30, c=3e8, Pt=1):
+    def __init__(self, size, N, Fc=2.4e9, D=30, c=100, Pt=1):
         self.size = size
         self.N = N
         self.Fc = Fc
@@ -27,6 +29,12 @@ class WSN:
         self.nodes = np.array([])
         self.anchor_nodes = set()
         self.known_nodes = set()
+        self.num_anchors = 10
+
+        self.samples = 1000
+        self.ar_b = 0.5
+        self.dt = 0.01
+        self.ar_std = 1
 
         self.t0 = 0
 
@@ -34,8 +42,10 @@ class WSN:
         self.nodes = np.random.default_rng().random(size=(self.N, 2)) * self.size
         print(self.N)
 
-    def reset_anchors(self, anchor_nodes=10):
-        if anchor_nodes is not None and isinstance(anchor_nodes, Iterable) and not isinstance(anchor_nodes, np.ndarray):
+    def reset_anchors(self, anchor_nodes=None):
+        if anchor_nodes is None:
+            anchor_nodes = self.num_anchors
+        if isinstance(anchor_nodes, Iterable) and not isinstance(anchor_nodes, np.ndarray):
             self.known_nodes = set(anchor_nodes)
             self.anchor_nodes = anchor_nodes
         elif isinstance(anchor_nodes, int):
@@ -68,9 +78,33 @@ class WSN:
                 )
             )
         return results
+    
+    def transmit_continuous(self, i, r0, signal_type="ar", return_taus=False):
+        if signal_type == "ar":
+            receivers = []
+            taus = []
+            for j in self.known_nodes:
+                if j == i:
+                    continue
+                rn = self.nodes[j]
+                pn = dist(r0, rn)
+                tn0 = pn / self.c
+                tau = int(tn0 / self.dt)
+                if pn > self.D:
+                    continue
+                receivers.append(rn)
+                taus.append(tau)
+            xs = get_one_way_ar_data(self.samples, self.ar_b, taus, self.ar_std)
+            results = list(zip(receivers, xs.T[1:]))
+            if return_taus:
+                return results, taus
+            else:
+                return results
+        else:
+            raise ValueError(f"Invalid type {signal_type}")
 
     def get_TDOA_H_and_b(self, results, *args, **kwargs):
-        r1, t10, no1, *_ = results[0]
+        r1, t10, *_ = results[0]
 
         # No transpose, because "rn - r1" are being inserted as rows
         H = np.array([rn - r1 for n, (rn, *_) in enumerate(results) if n != 0])
@@ -80,12 +114,12 @@ class WSN:
         b = np.array([
             # [np.dot(rn, rn) - norm_r1_2 - self.c ** 2 * ((tn0 - t10) ** 2 + 2 * t10 * (tn0 - t10))]
             [np.dot(rn, rn) - norm_r1_2 - self.c ** 2 * (tn0 - t10) ** 2]
-            for n, (rn, tn0, no, *_) in enumerate(results) if n != 0
+            for n, (rn, tn0, *_) in enumerate(results) if n != 0
         ]) * 0.5
         return H, b
 
     def get_TOA_H_and_b(self, results, *args, **kwargs):
-        r1, t10, no1, *_ = results[0]
+        r1, t10, *_ = results[0]
 
         # No transpose, because "rn - r1" are being inserted as rows
         H = np.array([rn - r1 for n, (rn, *_) in enumerate(results) if n != 0])
@@ -93,7 +127,7 @@ class WSN:
         t10_2 = t10 ** 2
         b = np.array([
             [norm_r1_2 - np.dot(rn, rn) + self.c ** 2 * (tn0 ** 2 - t10_2)]
-            for n, (rn, tn0, no, *_) in enumerate(results) if n != 0
+            for n, (rn, tn0, *_) in enumerate(results) if n != 0
         ]) * 0.5
         return H, b
     
@@ -115,6 +149,39 @@ class WSN:
 
     def get_LAA_H_and_b(self, results, *args, **kwargs):
         pass
+
+
+    def localize_TDOA_continuous(self, signal_type="ar", epochs=1):
+        est_pos = np.zeros(shape=(self.N, 2))
+        for n in self.known_nodes:
+            est_pos[n] = self.nodes[n]
+
+        Nmin = 3
+        for e in range(epochs):
+            for i, r0 in enumerate(self.nodes):
+                if i in self.anchor_nodes:
+                    # Do not try to estimate the location of an anchor node
+                    continue
+                results = self.transmit_continuous(i, r0, signal_type=signal_type)
+                # results, taus = self.transmit_continuous(i, r0, signal_type=signal_type, return_taus=True)
+                if len(results) < Nmin:
+                    continue
+                new_results = [(results[0][0], 0)]
+                sig0 = results[0][1]
+                max_tau = min(int(self.D / self.c / self.dt), self.samples) - 1
+                shifts = np.arange(-max_tau, max_tau, 1)
+                for _, result in enumerate(results, 1):
+                    xs = np.transpose([sig0, result[1]])
+                    tau = get_time_delay(xs, shifts)
+                    new_results.append((result[0], -tau * self.dt))
+                
+                H, b = self.get_TDOA_H_and_b(new_results)
+                r0_est = np.matmul(np.linalg.pinv(H), b)
+                est_pos[i] = r0_est.flatten()[:2]   # TDOA returns a triple
+                self.known_nodes.add(i)
+        return est_pos
+
+
 
 
     def localize(self, method="TOA", epochs=10):

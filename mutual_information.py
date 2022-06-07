@@ -1,6 +1,7 @@
 from matplotlib import pyplot as plt
 # from scipy.integrate import solve_ivp
 from m_solve_ivp import solve_ivp
+from scipy.signal import find_peaks
 import numpy as np
 from PartialSolution import *
 
@@ -50,13 +51,15 @@ def solve_ode_with_time_delay(A, B, time_delay, s0, t_range, dt):
     return sol.y
 
 def mi_shift(xs, shifts, do_interactive_graph=False):
+    xs, ys = xs.T
+    mis = []
     if do_interactive_graph:
         from matplotlib import pyplot as plt
         plt.ion()
         fig1, ax1 = plt.subplots()
 
-        xline, = ax1.plot(ts, xs, label="x(t)")
-        yline, = ax1.plot(ts, ys, label="y(t-τ)")
+        xline, = ax1.plot(xs, label="x(t)")
+        yline, = ax1.plot(ys, label="y(t-τ)")
 
         ax1.legend()
 
@@ -66,33 +69,33 @@ def mi_shift(xs, shifts, do_interactive_graph=False):
 
     for shift in shifts:
         if shift < 0:
-            length = len(ts) + shift
+            length = len(xs) + shift
             new_xs = xs[:length]
             new_ys = ys[-length:]
             if do_interactive_graph:
                 xline.set_ydata(
                     np.concatenate((
-                        new_xs, np.zeros(len(ts) - length)
+                        new_xs, np.zeros(len(xs) - length)
                     ))
                 )
                 yline.set_ydata(
                     np.concatenate((
-                        new_ys, np.zeros(len(ts) - length)
+                        new_ys, np.zeros(len(xs) - length)
                     ))
                 )
         else:
-            length = len(ts) - shift
+            length = len(xs) - shift
             new_xs = xs[-length:]
             new_ys = ys[:length]
             if do_interactive_graph:
                 xline.set_ydata(
                     np.concatenate((
-                        np.zeros(len(ts) - length), new_xs
+                        np.zeros(len(xs) - length), new_xs
                     ))
                 )
                 yline.set_ydata(
                     np.concatenate((
-                        np.zeros(len(ts) - length), new_ys
+                        np.zeros(len(xs) - length), new_ys
                     ))
                 )
             
@@ -110,10 +113,21 @@ def mi_shift(xs, shifts, do_interactive_graph=False):
             fig2.canvas.flush_events()
     return mis
 
+def get_time_delay(xs, shifts, do_interactive_graph=False):
+    mis = mi_shift(xs, shifts, do_interactive_graph=do_interactive_graph)
+    mean = np.mean(mis)
+    peaks, _ = find_peaks(mis, height=mean * 30)
+    peaks = shifts[peaks]
+    if len(peaks) != 1:
+        from matplotlib import pyplot as plt
+        print(f"Unable to determine peaks. Found peaks: {peaks}")
+        plt.plot(shifts, mis)
+        plt.show()
+        raise ValueError(f"Unable to determine peaks. Found peaks: {peaks}")
+    return peaks[0]
+
+
 def get_ar_data(samples, b=None, c=None, tau=5, std=1):
-    xs = np.empty(shape=(samples, 2))
-    xs[:tau] = np.random.normal(size=(tau, 2), scale=std)
-    
     if b is None:
         b = np.random.uniform(-1, 1)
     if c is None:
@@ -123,9 +137,61 @@ def get_ar_data(samples, b=None, c=None, tau=5, std=1):
         [[0, c],
          [b, 0]]
     )
+
+    xs = np.empty(shape=(samples, 2))
+    xs[:tau] = np.random.normal(size=(tau, 2), scale=std)
+    
     for i in range(tau, samples):
         xs[i] = np.matmul(A, xs[i-tau]) + np.random.normal(size=2, scale=std)
     return xs
+
+def get_multi_ar_data(samples, A, tau=5, std=1):
+    if A is None:
+        A = np.random.uniform(-1, 1, size=(5, 5))
+        np.fill_diagonal(A, 0)
+    dprint(A)
+
+    xs = np.empty(shape=(samples, len(A)))
+    xs[:tau] = np.random.normal(size=(tau, len(A)), scale=std)
+    
+    for i in range(tau, samples):
+        xs[i] = np.matmul(A, xs[i-tau]) + np.random.normal(size=len(A), scale=std)
+    return xs
+
+def get_one_way_ar_data(samples, coeffs=None, taus=5, std=1):
+    if coeffs is None:
+        coeffs = 5
+    if hasattr(coeffs, "__len__"):
+        size = len(coeffs) + 1
+    elif hasattr(taus, "__len__"):
+        size = len(taus) + 1
+    elif isinstance(coeffs, int):
+        size = coeffs + 1
+        coeffs = np.random.uniform(-1, 1, size=coeffs)
+    else:
+        raise ValueError("Either coeffs or taus should have a size or coeffs should be an int")
+    temp = np.empty(size)
+    temp[1:] = coeffs
+    temp[0] = 0
+    coeffs = temp
+    temp = np.empty_like(coeffs, dtype=np.int32)
+    temp[1:] = taus
+    temp[0] = 0
+    taus = temp
+    
+    dprint(coeffs)
+
+    xs = np.empty(shape=(samples, size))
+    xs[:np.max(taus), 1:] = np.random.normal(size=(np.max(taus), size - 1), scale=std)
+    xs[:, 0] = np.random.normal(size=samples, scale=std)
+    
+    for i in range(np.min(taus), samples):
+        # xs[i] = xs[[i - taus], range(len(coeffs))] + np.random.normal(size=len(coeffs), scale=std)
+        for j in range(size):
+            if i - taus[j] >= 0:
+                xs[i, j] = coeffs[j] * xs[i-taus[j], 0] + np.random.normal(scale=std)
+    return xs
+
 
 if __name__ == "__main__":
     # "de" or "ar"
@@ -162,18 +228,20 @@ if __name__ == "__main__":
     elif correlation_type == "ar":
         tau = 5
         dt = 1
-        std=1
+        std = 1
 
-        t_range = (0, 1000)
+        t_range = (0, 5000)
         size = t_range[1] - t_range[0]
         t_eval = np.arange(*t_range, dt)
-        xs = get_ar_data(b=1, samples=size, tau=tau, std=std)
+        # xs = get_ar_data(b=1, samples=size, tau=tau, std=std)
+        xs = get_one_way_ar_data(samples=size, coeffs=2, taus=(5, 1), std=std)
+        xs = xs[:, 1:]
 
-        plt.figure()
-        plt.plot(t_eval, xs)
-        plt.show(block=False)
+        # plt.figure()
+        # plt.plot(t_eval, xs)
+        # plt.show(block=False)
 
-        xs, ys = xs.T
+        # xs, ys = xs.T
     else:
         print("Invalid correlation type:", correlation_type)
         quit()
@@ -183,6 +251,9 @@ if __name__ == "__main__":
     mis = []
     shifts = np.arange(-num_shifts // 2, num_shifts // 2, 1)
     mis = mi_shift(xs, shifts, do_interactive_graph=do_interactive_graph)
+    mean = np.mean(mis)
+    peaks, _ = find_peaks(mis, height=mean * 6)
+    print(shifts[peaks])
 
     if not do_interactive_graph:
         plt.figure()
