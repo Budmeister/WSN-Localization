@@ -30,11 +30,18 @@ class WSN:
         self.anchor_nodes = set()
         self.known_nodes = set()
         self.num_anchors = 10
+        self.std = 1
 
         self.samples = 1000
-        self.ar_b = 0.5
+        self.message_length = None
         self.dt = 0.01
+
+        # ar
+        self.ar_b = 0.5
         self.ar_std = 1
+
+        # osc
+        self.epsilon = 0.25
 
         self.t0 = 0
 
@@ -65,7 +72,7 @@ class WSN:
             if pn > self.D:
                 continue
             # time = distance / rate
-            tn0 = pn / self.c + t0
+            tn0 = pn / self.c + t0 + np.random.normal(scale=self.std)
             # Rearranged equation (8)
             Pr = self.Pt / (pn * 4 * np.pi * self.Fc / self.c) ** 2
 
@@ -80,7 +87,12 @@ class WSN:
         return results
     
     def transmit_continuous(self, i, r0, signal_type="ar", return_taus=False):
-        if signal_type == "ar":
+        signal_types = {
+            "ar": lambda: get_one_way_ar_data(self.samples, self.ar_b, taus, self.ar_std),
+            "osc": lambda: get_one_way_osc_data(self.samples, taus, self.epsilon, a=4)
+        }
+        get_data = signal_types[signal_type]
+        if signal_type == "ar" or signal_type == "osc":
             receivers = []
             taus = []
             for j in self.known_nodes:
@@ -94,7 +106,7 @@ class WSN:
                     continue
                 receivers.append(rn)
                 taus.append(tau)
-            xs = get_one_way_ar_data(self.samples, self.ar_b, taus, self.ar_std)
+            xs = get_data()
             results = list(zip(receivers, xs.T[1:]))
             if return_taus:
                 return results, taus
@@ -151,10 +163,13 @@ class WSN:
         pass
 
 
-    def localize_TDOA_continuous(self, signal_type="ar", epochs=1):
+    def localize_TDOA_continuous(self, signal_type="ar", epochs=1, show_error="Error"):
         est_pos = np.zeros(shape=(self.N, 2))
         for n in self.known_nodes:
             est_pos[n] = self.nodes[n]
+        
+        if self.message_length is not None:
+            self.samples = int(self.message_length / self.dt)
 
         Nmin = 3
         for e in range(epochs):
@@ -172,7 +187,7 @@ class WSN:
                 shifts = np.arange(-max_tau, max_tau, 1)
                 for _, result in enumerate(results, 1):
                     xs = np.transpose([sig0, result[1]])
-                    tau = get_time_delay(xs, shifts)
+                    tau = get_time_delay(xs, shifts, show_error=show_error)
                     new_results.append((result[0], -tau * self.dt))
                 
                 H, b = self.get_TDOA_H_and_b(new_results)

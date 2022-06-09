@@ -4,9 +4,10 @@ from m_solve_ivp import solve_ivp
 from scipy.signal import find_peaks
 import numpy as np
 from PartialSolution import *
+from tqdm import tqdm
 
 if "DEBUG" not in globals():
-    DEBUG = True
+    DEBUG = False
 
 if DEBUG:
     def dprint(*args, **kwargs):
@@ -14,6 +15,39 @@ if DEBUG:
 else:
     def dprint(*args, **kwargs):
         pass
+
+# def solve_ode_with_time_delays(As, time_delays, s0, t_range, dt):
+#     def F(t, s, partial_sol=None):
+#         # if t in t_eval:
+#         # partial_sol.add_val(t, s)
+#         # p = partial_sol(t-time_delay)
+#         dprint()
+#         if partial_sol is None or \
+#                 partial_sol[0] is None or \
+#                 partial_sol[1] is None or \
+#                 len(partial_sol[0]) == 0 or \
+#                 len(partial_sol[1]) == 0:
+#             dprint("partial_sol is None; returning initial condition")
+#             p = s0
+#         else:
+#             ts, ys = partial_sol
+#             ts = np.hstack(ts)
+#             ys = np.hstack(ys)
+#             ys = np.transpose(ys)
+#             dprint(ts, ys)
+#             if len(ts) != len(ys):
+#                 dprint(f"Unequal lengths: len(t)={len(ts)}, len(y)={len(ys)}")
+#             known_vals = [(ts[i], ys[i]) for i in range(len(ys))] + [(t, s)]
+#             p, _ = x_polate(known_vals, t - time_delay, extrapolate_right=True)
+#         retval = np.matmul(A, s) + np.matmul(B, p)
+#         dprint("p =", p)
+#         dprint("s =", s)
+#         dprint("retval =", retval)
+#         return retval
+    
+#     t_eval = np.arange(*t_range, dt)
+#     sol = solve_ivp(F, t_range, s0, t_eval=t_eval, receive_partial_sol=True, args=())
+#     return sol.y
 
 def solve_ode_with_time_delay(A, B, time_delay, s0, t_range, dt):
     def F(t, s, partial_sol=None):
@@ -37,8 +71,6 @@ def solve_ode_with_time_delay(A, B, time_delay, s0, t_range, dt):
             if len(ts) != len(ys):
                 dprint(f"Unequal lengths: len(t)={len(ts)}, len(y)={len(ys)}")
             known_vals = [(ts[i], ys[i]) for i in range(len(ys))] + [(t, s)]
-            if "outer_sol" in globals():
-                outer_sol.known_vals = known_vals
             p, _ = x_polate(known_vals, t - time_delay, extrapolate_right=True)
         retval = np.matmul(A, s) + np.matmul(B, p)
         dprint("p =", p)
@@ -50,7 +82,7 @@ def solve_ode_with_time_delay(A, B, time_delay, s0, t_range, dt):
     sol = solve_ivp(F, t_range, s0, t_eval=t_eval, receive_partial_sol=True, args=())
     return sol.y
 
-def mi_shift(xs, shifts, do_interactive_graph=False):
+def mi_shift(xs, shifts, do_interactive_graph=False, dt=1):
     xs, ys = xs.T
     mis = []
     if do_interactive_graph:
@@ -113,16 +145,18 @@ def mi_shift(xs, shifts, do_interactive_graph=False):
             fig2.canvas.flush_events()
     return mis
 
-def get_time_delay(xs, shifts, do_interactive_graph=False):
+def get_time_delay(xs, shifts, do_interactive_graph=False, show_error=None):
     mis = mi_shift(xs, shifts, do_interactive_graph=do_interactive_graph)
     mean = np.mean(mis)
     peaks, _ = find_peaks(mis, height=mean * 30)
     peaks = shifts[peaks]
     if len(peaks) != 1:
-        from matplotlib import pyplot as plt
-        print(f"Unable to determine peaks. Found peaks: {peaks}")
-        plt.plot(shifts, mis)
-        plt.show()
+        if show_error:
+            from matplotlib import pyplot as plt
+            print(f"Unable to determine peaks. Found peaks: {peaks}")
+            plt.plot(shifts, mis)
+            plt.title(show_error)
+            plt.show()
         raise ValueError(f"Unable to determine peaks. Found peaks: {peaks}")
     return peaks[0]
 
@@ -192,39 +226,71 @@ def get_one_way_ar_data(samples, coeffs=None, taus=5, std=1):
                 xs[i, j] = coeffs[j] * xs[i-taus[j], 0] + np.random.normal(scale=std)
     return xs
 
+def get_one_way_osc_data(samples, taus, epsilon=0.25, f=None, a=4):
+    if f is None:
+        f = lambda x: a * x * (1 - x)
+    taus = [0] + [tau for tau in taus]
+    sigs = len(taus)
+    x0 = np.random.uniform(size=sigs)
+    xs = [x0]
+    def g(x, y):
+        return f(y) - f(x)
+    def next(x, t, epsilon):
+        y = np.array([
+            xs[t-tau][i] if t-tau >= 0 else np.random.uniform()
+            for i, tau in enumerate(taus)
+        ])
+        x0_t_tau = np.array([
+            xs[t-tau][0] if t-tau >= 0 else np.random.uniform()
+            for tau in taus
+        ])
+        retval = np.array([
+            f(x[i]) + epsilon * g(x[i], x0_t_tau[i])
+            for i in range(sigs)
+        ])
+        return retval
+    
+    x = x0
+    for t in range(1, samples):
+        x = next(x, t-1, epsilon)
+        xs.append(x)
+        
+    xs = np.array(xs)
+    return xs
+    
 
-if __name__ == "__main__":
-    # "de" or "ar"
-    correlation_type = "ar"
+
+def main():
+    # "de" or "ar" or "osc"
+    correlation_type = "de"
     do_interactive_graph = False
+    show_xs = True
+    ylim = None
 
     if correlation_type == "de":
         A = np.array(
-            [[-0.1, 0],
-            [0, 0]]
+            [[-1, 0.5, 0],
+             [-0.5, -1, 0],
+             [0, 0, 0]]
         )
         B = np.array(
-            [[0, 0],
-            [-0.4, -0.1]]
+            [[0, 0, 0],
+             [0, 0, 0],
+             [0.1, 0, -0.1]]
         )
-        time_delay = 5
-        s0 = np.array([1, 0.5])
+        time_delay = np.pi / 2
+        s0 = np.array([1, 0, 0.5])
         outer_sol = PartialSolution((0, s0))
 
         t_range = (0, 40)
         dt = 0.1
         t_eval = np.arange(*t_range, dt)
 
-        xs, ys = solve_ode_with_time_delay(A, B, time_delay, s0, t_range, dt)
-        print([(a, b, len(a), len(b)) for (a, b) in ((np.array([kv[0] for kv in outer_sol.known_vals]), t_eval),)])
-        plt.figure()
-        plt.plot(t_eval, [outer_sol(t) for t in t_eval], label="partial_sol")
-        plt.plot(t_eval, np.transpose((xs, ys)), label="real")
-        plt.legend()
-        plt.show(block=False)
-        std = 0.1
+        xs = solve_ode_with_time_delay(A, B, time_delay, s0, t_range, dt)
+        # print([(a, b, len(a), len(b)) for (a, b) in ((np.array([kv[0] for kv in outer_sol.known_vals]), t_eval),)])
+        std = 0.05
         xs = xs + np.random.normal(size=xs.shape, scale=std)
-        ys = ys + np.random.normal(size=xs.shape, scale=std)
+        xs = xs[[0, 2]].T
     elif correlation_type == "ar":
         tau = 5
         dt = 1
@@ -242,20 +308,49 @@ if __name__ == "__main__":
         # plt.show(block=False)
 
         # xs, ys = xs.T
+    elif correlation_type == "osc":
+        sigs = 3
+        # tau = 5
+        taus = 0, 5, 10
+        samples = 1000
+        epsilon = 0.2
+        show_xs = False
+
+        a = 4
+        xs = get_one_way_osc_data(samples, taus, epsilon, a=a)
+        xs = xs[:, -2:]
+
+        dt = 1
+        t_eval = np.arange(0, samples, dt)
+        ylim = (0, 1)
+        
     else:
         print("Invalid correlation type:", correlation_type)
         quit()
     
-    num_shifts = 40
+    if show_xs:
+        plt.figure()
+        plt.plot(t_eval, xs)
+        plt.ylim(ylim)
+        plt.show(block=False)
+    
+    num_shifts = 80
     ts: np.ndarray = t_eval
     mis = []
     shifts = np.arange(-num_shifts // 2, num_shifts // 2, 1)
-    mis = mi_shift(xs, shifts, do_interactive_graph=do_interactive_graph)
+    mis = mi_shift(xs, shifts, do_interactive_graph=do_interactive_graph, dt=dt)
     mean = np.mean(mis)
     peaks, _ = find_peaks(mis, height=mean * 6)
     print(shifts[peaks])
 
     if not do_interactive_graph:
         plt.figure()
-        plt.plot(shifts, mis)
+        try:
+            plt.plot([-time_delay, -time_delay], [np.max(mis), np.min(mis)], color="gray")
+        except:
+            dprint("time_delay not defined")
+        plt.plot(shifts * dt, mis)
         plt.show()
+
+if __name__ == "__main__":
+    main()
