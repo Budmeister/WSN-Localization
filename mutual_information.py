@@ -97,7 +97,7 @@ def mi_shift(xs, shifts, do_interactive_graph=False, dt=1):
 
         fig2, ax2 = plt.subplots()
         miline, = ax2.plot(shifts * dt, np.concatenate((mis, np.zeros(len(shifts) - len(mis)))))
-        ax2.set_ylim((-2, 6))
+        ax2.set_ylim((-2, 2))
 
     for shift in shifts:
         if shift < 0:
@@ -262,7 +262,7 @@ def get_one_way_osc_data(samples, taus, epsilon=0.25, f=None, a=4):
 
 def main():
     # "de" or "ar" or "osc"
-    correlation_type = "de"
+    correlation_type = "osc"
     do_interactive_graph = False
     show_xs = True
     ylim = None
@@ -296,11 +296,11 @@ def main():
         dt = 1
         std = 1
 
-        t_range = (0, 5000)
+        t_range = (0, 1000)
         size = t_range[1] - t_range[0]
         t_eval = np.arange(*t_range, dt)
         # xs = get_ar_data(b=1, samples=size, tau=tau, std=std)
-        xs = get_one_way_ar_data(samples=size, coeffs=2, taus=(5, 1), std=std)
+        xs = get_one_way_ar_data(samples=size, coeffs=2, taus=(10, 5), std=std)
         xs = xs[:, 1:]
 
         # plt.figure()
@@ -314,7 +314,7 @@ def main():
         taus = 0, 5, 10
         samples = 1000
         epsilon = 0.2
-        show_xs = False
+        # show_xs = False
 
         a = 4
         xs = get_one_way_osc_data(samples, taus, epsilon, a=a)
