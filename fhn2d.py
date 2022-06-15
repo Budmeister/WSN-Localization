@@ -91,7 +91,7 @@ def main():
     T = 1000
     t0 = 0
     dt = 0.1
-    s = 0.02 # 0.02 # 0.10
+    s = 0.0 # 0.02 # 0.10
     D = 1.0
     a = 0.5
     b = 0.7
@@ -112,10 +112,13 @@ def main():
     n_4 = int(N/4) # 1/4 lattice size
     n_5 = int(N/5) # 1/5 lattice size
     # stim protocol, array of elements [[t0,t1], [x0,x1], [y0,y1]]
-    stim = [ [[25,50], [1,N], [3,8]], [[130,150], [n_2-2,n_2+2], [10,25]] ]
+    # stim = [ [[25,50], [1,N], [3,8]], [[130,150], [n_2-2,n_2+2], [10,25]] ]
+    # stim = [ [[0,50], [1,N], [3,8]] ]
+    stim = [ [[25, 40], [N // 2 - 5, N // 2 + 5], [N // 2 - 5, N // 2 + 5]] ]
     #stim = []
     # dead blocks, array of elementy [[x0,x1], [y0,y1]]
-    blocks = [ [[2*n_4,3*n_4], [15,20]], [[2*n_4+10,3*n_4+10], [40,45]] ]
+    # blocks = [ [[2*n_4,3*n_4], [15,20]], [[2*n_4+10,3*n_4+10], [40,45]] ]
+    blocks = []
     # run simulation
     data = fhn2d(N, T, t0, dt, s, D, a, b, c, I, stim, blocks)
     print("[+] data dimensions: ", data.shape)
