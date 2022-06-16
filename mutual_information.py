@@ -16,39 +16,6 @@ else:
     def dprint(*args, **kwargs):
         pass
 
-# def solve_ode_with_time_delays(As, time_delays, s0, t_range, dt):
-#     def F(t, s, partial_sol=None):
-#         # if t in t_eval:
-#         # partial_sol.add_val(t, s)
-#         # p = partial_sol(t-time_delay)
-#         dprint()
-#         if partial_sol is None or \
-#                 partial_sol[0] is None or \
-#                 partial_sol[1] is None or \
-#                 len(partial_sol[0]) == 0 or \
-#                 len(partial_sol[1]) == 0:
-#             dprint("partial_sol is None; returning initial condition")
-#             p = s0
-#         else:
-#             ts, ys = partial_sol
-#             ts = np.hstack(ts)
-#             ys = np.hstack(ys)
-#             ys = np.transpose(ys)
-#             dprint(ts, ys)
-#             if len(ts) != len(ys):
-#                 dprint(f"Unequal lengths: len(t)={len(ts)}, len(y)={len(ys)}")
-#             known_vals = [(ts[i], ys[i]) for i in range(len(ys))] + [(t, s)]
-#             p, _ = x_polate(known_vals, t - time_delay, extrapolate_right=True)
-#         retval = np.matmul(A, s) + np.matmul(B, p)
-#         dprint("p =", p)
-#         dprint("s =", s)
-#         dprint("retval =", retval)
-#         return retval
-    
-#     t_eval = np.arange(*t_range, dt)
-#     sol = solve_ivp(F, t_range, s0, t_eval=t_eval, receive_partial_sol=True, args=())
-#     return sol.y
-
 def solve_ode_with_time_delay(A, B, time_delay, s0, t_range, dt):
     def F(t, s, partial_sol=None):
         # if t in t_eval:
