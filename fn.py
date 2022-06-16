@@ -2,7 +2,7 @@ from pde import *
 import numpy as np
 import os
 import json
-from fhn2d import animate_video
+from animate import animate_video
 
 
 def save_params(params, dir):
@@ -109,9 +109,3 @@ def run_FN2():
     vs = data[:, 0, :]
     ws = data[:, 1, :]
     return grid, {**params, **other_params}, memory_storage, data, vs, ws
-
-def make_fn_video(dir, params, vs, ws):
-    os.makedirs(dir, exist_ok=True)
-    save_params(params, f"{dir}/params.json")
-    animate_video(f"{dir}/vs.mp4", vs)
-    animate_video(f"{dir}/ws.mp4", ws)
