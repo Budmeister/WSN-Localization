@@ -4,6 +4,7 @@ from WSNAreaWidget import WSNAreaWidget
 from global_funcs import *
 from wsn_eval import *
 from tqdm import tqdm
+from PIL import Image, ImageTk
 
 class App:
     def __init__(self):
@@ -15,7 +16,16 @@ class App:
     def reset_nodes(self):
         self.wsn_area.clear_nodes()
         self.wsn_area.clear_est_values()
+        self.wsn_area.clear_other_values()
         self.wsn.reset_nodes()
+        self.wsn.reset_anchors()
+        self.wsn_area.set_nodes(self.wsn.nodes, self.wsn.anchor_nodes)
+    
+    def reset_clusters(self):
+        self.wsn_area.clear_nodes()
+        self.wsn_area.clear_est_values()
+        self.wsn_area.clear_other_values()
+        self.wsn.reset_clusters()
         self.wsn.reset_anchors()
         self.wsn_area.set_nodes(self.wsn.nodes, self.wsn.anchor_nodes)
 
@@ -24,19 +34,23 @@ class App:
         est_pos = self.wsn.localize(method)
         self.wsn_area.clear_est_values()
         self.wsn_area.set_est_values(est_pos)
+        center = np.mean(self.wsn.nodes, axis=0)
+        self.wsn_area.set_other_values(np.reshape(center, (1, 2)))
         success, error = err(est_pos, self.wsn.nodes, self.wsn.anchor_nodes)
         print(success, error)
     
-    def localize_single_TDOA(self, signal_type):
+    def localize_single_continuous(self, method="mTDOA", signal_type="osc"):
         self.wsn.reset_anchors()
-        est_pos = self.wsn.localize_TDOA_continuous(signal_type=signal_type)
+        est_pos = self.wsn.localize_continuous(method=method, signal_type=signal_type)
         self.wsn_area.clear_est_values()
         self.wsn_area.set_est_values(est_pos)
+        center = np.mean(self.wsn.nodes, axis=0)
+        self.wsn_area.set_other_values(np.reshape(center, (1, 2)))
         success, error = err(est_pos, self.wsn.nodes, self.wsn.anchor_nodes)
         print(success, error)
         
     # Run continuous TDOA on a set of dts and display the errors on a graph
-    def localize_TDOA_continuous(self, signal_type):
+    def localize_several_continuous(self, method="mTDOA", signal_type="osc"):
         self.wsn.reset_anchors()
         dt_to_show = self.wsn.dt
         dt_range = (4, 100)
@@ -45,7 +59,7 @@ class App:
         for dt in tqdm(range(*dt_range)):
             self.wsn.dt = dt * multiplier
             try:
-                est_pos = self.wsn.localize_TDOA_continuous(signal_type=signal_type, show_error=False)
+                est_pos = self.wsn.localize_continuous(method=method, signal_type=signal_type, show_error=False)
                 success, error = err(est_pos, self.wsn.nodes, self.wsn.anchor_nodes)
                 errors[dt-dt_range[0]] = error
                 # if dt * multiplier == dt_to_show:
@@ -56,7 +70,7 @@ class App:
         plt.plot(range(*dt_range), errors)
         plt.show()
     
-    def test_mTDOA_vs_continuous(self, signal_type):
+    def test_TDOA_vs_continuous(self, signal_type):
         self.wsn.reset_anchors()
 
         # Continuous
@@ -70,7 +84,7 @@ class App:
             avg_err = 0
             for dt in range(base_dt - span, base_dt + span):
                 self.wsn.dt = dt * multiplier
-                est_pos = self.wsn.localize_TDOA_continuous(signal_type=signal_type, show_error=True)
+                est_pos = self.wsn.localize_continuous(signal_type=signal_type, show_error=True)
                 success, error = err(est_pos, self.wsn.nodes, self.wsn.anchor_nodes)
                 avg_success += success
                 avg_err += error
@@ -104,8 +118,21 @@ class App:
         print(f"error={mtdoa_err}")
         print()
 
-
-        
+    def show_fn_solution(self):
+        mtin.solve_default_fn_equ()
+        width, height = self.wsn_area.width, self.wsn_area.height
+        data: np.ndarray = mtin.default_fn_sol[-1, 0].flatten()
+        x, n = data.max(), data.min()
+        data = (data - n) / (x - n)
+        data = (data * 255).astype(np.int32)
+        data = [(v, v, v) for v in data]
+        zoom = 5
+        image = Image.new("RGB", (width // zoom, height // zoom))
+        image.putdata(data)
+        image = image.resize((width, height), resample=Image.BICUBIC)
+        image = ImageTk.PhotoImage(image)
+        # image = ImageTk.PhotoImage(Image.open("image.png"))
+        self.wsn_area.set_bg_image(image)
 
     def show(self):
         if self.running:
@@ -125,12 +152,15 @@ class App:
         button_rows = [
             [
                 ("Reset Nodes", self.reset_nodes),
-                ("Localize TOA", lambda: self.localize("TOA")),
-                ("Localize TDOA", lambda: self.localize("TDOA")),
-                ("Localize\nSingle TDOA\nOsc", lambda: self.localize_single_TDOA("osc")),
-                ("Test mTDOA\nvs continuous\nOsc", lambda: self.test_mTDOA_vs_continuous("osc")),
-                ("Localize\nSingle TDOA\nAR", lambda: self.localize_single_TDOA("ar")),
-                ("Test mTDOA\nvs continuous\nAR", lambda: self.test_mTDOA_vs_continuous("ar")),
+                ("Reset Clusters", self.reset_clusters),
+                ("Set FN BG", self.show_fn_solution),
+                # ("Localize TOA", lambda: self.localize("TOA")),
+                # ("Localize TDOA", lambda: self.localize("TDOA")),
+                ("Localize\ntmTDOA", lambda: self.localize("tmTDOA")),
+                # ("Localize\nSingle TDOA\nOsc", lambda: self.localize_single_continuous(method="TDOA", signal_type="osc")),
+                # ("Test TDOA\nvs continuous\nOsc", lambda: self.test_TDOA_vs_continuous(method="TDOA", signal_type="osc")),
+                ("Localize\nSingle cTDOA\nFN", lambda: self.localize_single_continuous(method="cTDOA", signal_type="fn")),
+                ("Test TDOA\nvs continuous\nFN", lambda: self.test_TDOA_vs_continuous(method="mTDOA", signal_type="fn")),
             ]
         ]
 
@@ -144,26 +174,12 @@ class App:
                 gridx += 1
         gridy += 1
 
-        # reset_nodes_btn = Button(self.root, text="Reset Nodes", command=self.reset_nodes, width=big_w, height=big_h)
-        # reset_nodes_btn.grid(row=1, column=0)
-
-        # localize_TOA_btn = Button(self.root, text="Localize TOA", command=lambda: self.localize("TOA"), width=big_w, height=big_h)
-        # localize_TOA_btn.grid(row=1, column=1)
-
-        # localize_TDOA_btn = Button(self.root, text="Localize TDOA", command=lambda: self.localize("TDOA"), width=big_w, height=big_h)
-        # localize_TDOA_btn.grid(row=1, column=2)
-
-        # localize_RSS_btn = Button(self.root, text="Localize\nSingle TDOA", command=lambda: self.localize_single_TDOA("osc"), width=big_w, height=big_h)
-        # localize_RSS_btn.grid(row=1, column=3)
-
-        # localize_LAA_btn = Button(self.root, text="Test mTDOA\nvs continuous", command=lambda: self.test_mTDOA_vs_continuous("osc"), width=big_w, height=big_h)
-        # localize_LAA_btn.grid(row=1, column=4)
-
         option_columns = [
             [
-                ("N", 0, 100, 5),
-                # ("Fc", 1e8, 1e10, 2.4e9),
-                ("num_anchors", 0, 10, 4),
+                # ("N", 0, 100, 5),
+                # ("num_anchors", 0, 10, 4),
+                ("cluster_size", 1, 10, 3),
+                ("num_clusters", 1, 10, 3),
                 ("D", 0, 142, 142),
                 ("dt", 1, 500, 100, 1, 0.0001),
             ],
@@ -172,10 +188,11 @@ class App:
                 ("message_length", 0, 10, 10, 0.01),
                 # ("samples", 0, 1000, 100),
                 # ("t0", 0, 50, 0, 1),
-                ("ar_b", 0.0, 1.0, 0.9, 0.01),
+                # ("ar_b", 0.0, 1.0, 0.9, 0.01),
                 # ("ar_std", 0, 3, 1, 0.01),
                 ("std", 0, 100, 10, 1, 0.001),
-                ("epsilon", 0.0, 1.0, 0.25, 0.01),
+                # ("epsilon", 0.0, 1.0, 0.25, 0.01),
+                ("cluster_spacing", 1, 10, 10),
             ]
         ]
         def t0_command(num):
@@ -194,7 +211,7 @@ class App:
                     multiplier = others[1]
                 else:
                     multiplier = 1
-                s_lbl = Label(self.root, text=name)
+                s_lbl = Label(self.root, text=name + ((" " + str(multiplier)) if multiplier != 1 else ""))
                 s_lbl.grid(row=gridy, column=gridx)
                 slider = Scale(self.root, from_=min, to=max, length=50 * zoom, tickinterval=(max - min) / 2, orient=HORIZONTAL)
                 slider.set(default)

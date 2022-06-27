@@ -1,8 +1,6 @@
 from pde import *
 import numpy as np
-import os
 import json
-from animate import animate_video
 
 
 def save_params(params, dir):
@@ -12,8 +10,10 @@ def save_params(params, dir):
 class FHN(PDEBase):
     def __init__(
         self, N, n, T, dt, D, a, b, c, I0, stim, 
-        bc="auto_periodic_neumann", w_h=1, w_l=1
+        bc="auto_periodic_neumann", w_h=1, w_l=1,
+        *args, **kwargs
     ):
+        super().__init__(*args, **kwargs)
         self.N = N
         self.n = n
         self.T = T

@@ -5,6 +5,7 @@ from scipy.signal import find_peaks
 import numpy as np
 from PartialSolution import *
 from tqdm import tqdm
+from fn import *
 
 if "DEBUG" not in globals():
     DEBUG = False
@@ -112,20 +113,28 @@ def mi_shift(xs, shifts, do_interactive_graph=False, dt=1):
             fig2.canvas.flush_events()
     return mis
 
-def get_time_delay(xs, shifts, do_interactive_graph=False, show_error=None):
+def get_time_delay(xs, shifts, ensure_one_peak=True, closest_to_zero=False, do_interactive_graph=False, show_error=None):
     mis = mi_shift(xs, shifts, do_interactive_graph=do_interactive_graph)
     mean = np.mean(mis)
-    peaks, _ = find_peaks(mis, height=mean * 30)
+    peaks, properties = find_peaks(mis, height=(mean * 30 if ensure_one_peak else 0))
     peaks = shifts[peaks]
-    if len(peaks) != 1:
+    if closest_to_zero:
+        if len(peaks) == 0:
+            if show_error:
+                print(f"Unable to determine peaks. Found peaks: {peaks}")
+                plt.plot(shifts, mis)
+                plt.title(show_error)
+                plt.show()
+            raise ValueError(f"Unable to determine peaks. Found peaks: {peaks}")
+        return peaks[np.argmin(abs(peaks))]
+    elif ensure_one_peak and len(peaks) != 1:
         if show_error:
-            from matplotlib import pyplot as plt
             print(f"Unable to determine peaks. Found peaks: {peaks}")
             plt.plot(shifts, mis)
             plt.title(show_error)
             plt.show()
         raise ValueError(f"Unable to determine peaks. Found peaks: {peaks}")
-    return peaks[0]
+    return peaks[0] if ensure_one_peak else peaks[np.argmax(properties["peak_heights"])]
 
 
 def get_ar_data(samples, b=None, c=None, tau=5, std=1):
@@ -225,7 +234,61 @@ def get_one_way_osc_data(samples, taus, epsilon=0.25, f=None, a=4):
     xs = np.array(xs)
     return xs
     
+default_fn_equ_params = {
+    'N': 100,
+    'n': 100,
+    'T': 3000,
+    'dt': 0.1,
+    'D': 1,
+    'a': 0.5,
+    'b': 0.7,
+    'c': 0.3,
+    'I0': 1.0,
+    'stim': [[[25, 40], [45, 65], [45, 65]]],
+    'w_h': 1,
+    'w_l': 1,
+    # 'noise': 0.02
+}
+def get_default_fn_initial_state():
+    # grid = UnitGrid((N, N))
+    N, n = [default_fn_equ_params.get(key) for key in ("N", "n")]
+    shape = (n, n)
+    grid = CartesianGrid([(0, N), (0, N)], shape)
+    data_v = np.zeros(shape)
+    data_w = np.zeros(shape)
+    # data_v[N // 2, N // 2] = I
+    v0 = ScalarField(grid, data_v)
+    w0 = ScalarField(grid, data_w)
+    return grid, FieldCollection((v0, w0))
+default_fn_equ = FHN(**default_fn_equ_params)
+default_fn_sol = None
+def solve_default_fn_equ(resolve=False):
+    global default_fn_sol
+    if default_fn_sol is None or resolve:
+        T, dt = [default_fn_equ_params.get(key) for key in ("T", "dt")]
+        grid, vw0 = get_default_fn_initial_state()
+        memory_storage = MemoryStorage()
+        default_fn_equ.solve(vw0, t_range=T * dt, dt=dt, tracker=[memory_storage.tracker(dt)])
+        default_fn_sol = np.array(memory_storage.data)
+    # save_params(default_fn_equ_params, "./default_fn_equ_params.json")
 
+def get_fn_data(samples, nodes, use_default_equ=True, initial_state=None, *args, **kwargs):
+    if use_default_equ:
+        solve_default_fn_equ()
+        data = default_fn_sol
+    else:
+        eq = FHN(*args, **kwargs)
+        if initial_state is None:
+            grid, initial_state = get_default_fn_initial_state()
+        dt, = [default_fn_equ_params.get(key) for key in ("dt")]
+        memory_storage = MemoryStorage()
+        eq.solve(initial_state, t_range=samples * dt, tracker=[memory_storage.tracker(dt)])
+        data = np.array(memory_storage.data)
+    
+    signals = np.array([data[:, :, int(node[0]), int(node[1])] for node in nodes], copy=False)
+    # signals.shape = (t, vw)
+    return signals
+        
 
 def main():
     # "de" or "ar" or "osc"

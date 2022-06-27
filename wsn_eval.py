@@ -18,7 +18,7 @@ def err(est, real, anchors):
     return num_determined, euclid_dist
 
 
-if __name__ == "__main__":
+def main():
     import matplotlib.pyplot as plt
     from tqdm import tqdm
     wsn = WSN(100, 11, D=200)
@@ -29,7 +29,7 @@ if __name__ == "__main__":
     successes = []
     errors = []
     for nf in tqdm(noise_factors):
-        wsn.noise_factor = nf
+        wsn.std = nf
         avg_success = 0
         avg_error = 0
         for _ in range(num_trials):
@@ -48,3 +48,6 @@ if __name__ == "__main__":
     plt.plot(noise_factors, successes)
     plt.plot(noise_factors, errors)
     plt.show()
+
+if __name__ == "__main__":
+    main()
