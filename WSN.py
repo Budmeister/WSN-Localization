@@ -46,10 +46,10 @@ class WSN:
         self.D = D
         self.c = c
         self.Pt = Pt
-        self.nodes = np.array([])
+        self.nodes = np.zeros((0, 2))
         self.anchor_nodes = set()
         self.known_nodes = set()
-        self.num_anchors = 10
+        self.num_anchors = 0
         self.std = std
 
         self.samples = samples
@@ -98,6 +98,13 @@ class WSN:
         )
         self.MST = None
         self.printv(self.num_clusters, self.cluster_size)
+    
+    def clear_nodes(self):
+        self.N = 0
+        self.num_anchors = 0
+        self.nodes = np.zeros((0, 2))
+        self.MST = None
+        self.printv(0)
 
     def reset_anchors(self, anchor_nodes=None):
         self.MST = None
@@ -173,7 +180,7 @@ class WSN:
             for j in self.known_nodes:
                 rn = self.nodes[j]
                 receivers.append(rn)
-            xs = get_data()[:, 400:, 0]
+            xs = get_data()[:, :, 0]
             results = list(zip(receivers, xs))
             return results
         else:
@@ -308,6 +315,7 @@ class WSN:
         clusters = np.array([nodes[c * cluster_size:(c+1) * cluster_size] for c in range(num_clusters)])
         if clusters.ndim != 3:
             raise ValueError("Not enough nodes")
+        dt = default_fn_equ_params["dt"]
         H = np.zeros((num_clusters * (cluster_size-1), num_clusters + 3))
         b = np.zeros(num_clusters * (cluster_size-1))
         shifts = np.arange(-max_tau, max_tau, 1)
@@ -318,8 +326,15 @@ class WSN:
                     rn = clusters[c][n]
                     sign = results[c * cluster_size + n][1]
                     # Generate time
-                    # tn = (dist(rn, r0) - dist(rc, r0)) / wsn.c
-                    tn = get_time_delay(np.transpose([sigc, sign]), shifts, closest_to_zero=True, ensure_one_peak=False, show_error=True)
+                    r0 = np.array([55, 55])
+                    # tn = -(dist(rn, r0) - dist(rc, r0)) / self.c
+                    tn = get_time_delay(np.transpose([sign, sigc]), shifts, closest_to_zero=False, ensure_one_peak=False, show_error=True) * dt
+                    
+                    cc = 1.6424885622140555
+                    center = np.array([55, 55])
+                    real_dt = (dist(rn, center) - dist(rc, center)) / cc
+                    self.printv(tn, real_dt, rc, rn)
+
                     Hn = np.zeros(num_clusters + 3)
                     Hn[:2] = 2 * (rn - rc)
                     Hn[2] = tn ** 2
@@ -360,7 +375,7 @@ class WSN:
     def get_LAA_H_and_b(self, results, *args, **kwargs):
         pass
 
-    def localize_fn_continuous(self, method="mTDOA", epochs=1, show_error="Error"):
+    def localize_fn_continuous(self, method="mTDOA", return_full_array=False, *args, **kwargs):
         self.dt = default_fn_equ_params["dt"]
         methods = {
             "mTDOA": self.get_mTDOA_H_and_b,
@@ -376,6 +391,10 @@ class WSN:
             results = self.transmit_continuous(signal_type="fn")
             H, b = get_H_and_b(results, max_tau=max_tau)
             est_pos = np.linalg.pinv(H) @ b
+            self.printv(est_pos)
+            if return_full_array:
+                est_pos = est_pos.flatten()
+                return est_pos.reshape((1, len(est_pos)))
             return est_pos.flatten()[:2].reshape((1, 2))
 
 
@@ -407,20 +426,24 @@ class WSN:
         results = [(np.array(rn), delays[rn]) for rn in delays]
         H, b = get_H_and_b(results)
         est_pos = np.linalg.pinv(H) @ b
+        self.printv(est_pos)
+        if return_full_array:
+            est_pos = est_pos.flatten()
+            return est_pos.reshape((1, len(est_pos)))
         return est_pos.flatten()[:2].reshape((1, 2))
 
 
 
-    def localize_continuous(self, method="mTDOA", signal_type="osc", epochs=1, show_error="Error"):
+    def localize_continuous(self, method="mTDOA", signal_type="osc", epochs=1, show_error="Error", return_full_array=False):
         if signal_type == "fn":
-            return self.localize_fn_continuous(method=method, epochs=1, show_error=show_error)
+            return self.localize_fn_continuous(method=method, return_full_array=return_full_array)
         methods = {
             "mTDOA": self.get_mTDOA_H_and_b,
             "TDOA": self.get_TDOA_H_and_b
         }
         get_H_and_b = methods[method]
 
-        est_pos = np.zeros(shape=(self.N, 2))
+        est_pos = np.zeros(shape=(self.N, 2)) if not return_full_array else [[0, 0] for _ in range(self.N)]
         for n in self.known_nodes:
             est_pos[n] = self.nodes[n]
         
@@ -448,8 +471,12 @@ class WSN:
                 
                 H, b = get_H_and_b(new_results)
                 r0_est = np.matmul(np.linalg.pinv(H), b)
-                est_pos[i] = r0_est.flatten()[:2]   # TDOA returns a triple
+                pos = r0_est.flatten()
+                if not return_full_array:
+                    pos = est_pos[:2]   # TDOA returns a triple
+                est_pos[i] = pos
                 self.known_nodes.add(i)
+        est_pos = np.asarray(est_pos)
         return est_pos
 
 

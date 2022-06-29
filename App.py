@@ -28,6 +28,12 @@ class App:
         self.wsn.reset_clusters()
         self.wsn.reset_anchors()
         self.wsn_area.set_nodes(self.wsn.nodes, self.wsn.anchor_nodes)
+    
+    def clear_nodes(self):
+        self.wsn_area.clear_nodes()
+        self.wsn_area.clear_est_values()
+        self.wsn_area.clear_other_values()
+        self.wsn.clear_nodes()
 
     def localize(self, method):
         self.wsn.reset_anchors()
@@ -46,8 +52,12 @@ class App:
         self.wsn_area.set_est_values(est_pos)
         center = np.mean(self.wsn.nodes, axis=0)
         self.wsn_area.set_other_values(np.reshape(center, (1, 2)))
-        success, error = err(est_pos, self.wsn.nodes, self.wsn.anchor_nodes)
-        print(success, error)
+        print(est_pos)
+        try:
+            success, error = err(est_pos, self.wsn.nodes, self.wsn.anchor_nodes)
+            print(success, error)
+        except:
+            pass
         
     # Run continuous TDOA on a set of dts and display the errors on a graph
     def localize_several_continuous(self, method="mTDOA", signal_type="osc"):
@@ -121,7 +131,8 @@ class App:
     def show_fn_solution(self):
         mtin.solve_default_fn_equ()
         width, height = self.wsn_area.width, self.wsn_area.height
-        data: np.ndarray = mtin.default_fn_sol[-1, 0].flatten()
+        frame_to_show = 300
+        data: np.ndarray = mtin.default_fn_sol[frame_to_show, 0].flatten()
         x, n = data.max(), data.min()
         data = (data - n) / (x - n)
         data = (data * 255).astype(np.int32)
@@ -134,6 +145,54 @@ class App:
         # image = ImageTk.PhotoImage(Image.open("image.png"))
         self.wsn_area.set_bg_image(image)
 
+    def start_signal_views(self):
+        self.signal_views = not self.signal_views
+
+    def mouse_click_event(self, event, button):
+        if button in (1, 3):
+            zoom = 5
+            x, y = event.x, event.y
+            node = np.array([x / zoom, y / zoom])
+            self.wsn.nodes = np.concatenate((self.wsn.nodes, [node]), axis=0)
+            self.wsn.N = len(self.wsn.nodes)
+            self.wsn_area.set_nodes([node], [])
+            dt = mtin.default_fn_equ_params["dt"]
+            if self.signal_views:
+                plt.ion()
+                fig = plt.figure("Signal Values")
+                data: np.ndarray = mtin.default_fn_sol[:, 0, x // zoom, y // zoom]
+                T = len(data)
+                plt.plot(np.linspace(0, T, T, endpoint=False) * dt, data)
+                fig.show()
+
+                if self.wsn.N >= 2:
+                    # Show mis if there are two graphs
+                    max_tau = 200
+                    shifts = np.arange(-max_tau, max_tau, 1)
+                    xp, yp = self.wsn.nodes[-2].astype(np.int32)
+                    sigp: np.ndarray = mtin.default_fn_sol[:, 0, xp, yp]
+                    mis = mtin.mi_shift(np.transpose([sigp, data]), shifts, dt=dt)
+                    peaks, properties = find_peaks(mis, height=0)
+                    print(shifts[peaks] * dt)
+                    peak = shifts[peaks[np.argmax(properties["peak_heights"])]] * dt
+                    c = 1.6424885622140555
+                    center = np.array([55, 55])
+                    real_dt = (dist(node, center) - dist(self.wsn.nodes[-2], center)) / c
+                    print(peak, real_dt)
+
+                    fig = plt.figure("MIs")
+                    plt.plot(shifts * dt, mis)
+                    fig.show()
+        elif button == 2:
+            self.wsn.num_anchors += 1
+            if self.wsn.num_anchors > self.wsn.N:
+                self.wsn.num_anchors = 0
+            self.wsn.reset_anchors()
+            self.wsn_area.clear_nodes()
+            self.wsn_area.set_nodes(self.wsn.nodes, self.wsn.anchor_nodes)
+
+
+
     def show(self):
         if self.running:
             return
@@ -145,6 +204,10 @@ class App:
         zoom = 5
         self.wsn_area = WSNAreaWidget(self.root, 100 * zoom, 100 * zoom, zoom=zoom)
         self.wsn_area.grid(row=0, column=0, columnspan=7)
+        self.wsn_area.bind("<Button-1>", lambda event: self.mouse_click_event(event, 1))
+        self.wsn_area.bind("<Button-2>", lambda event: self.mouse_click_event(event, 2))
+        self.wsn_area.bind("<Button-3>", lambda event: self.mouse_click_event(event, 3))
+        self.signal_views = False
 
         big_w = 11
         big_h = 3
@@ -153,14 +216,17 @@ class App:
             [
                 ("Reset Nodes", self.reset_nodes),
                 ("Reset Clusters", self.reset_clusters),
+                ("Clear Nodes", self.clear_nodes),
                 ("Set FN BG", self.show_fn_solution),
                 # ("Localize TOA", lambda: self.localize("TOA")),
-                # ("Localize TDOA", lambda: self.localize("TDOA")),
-                ("Localize\ntmTDOA", lambda: self.localize("tmTDOA")),
+                # ("Localize\nmTDOA", lambda: self.localize("mTDOA")),
+                # ("Localize\ntmTDOA", lambda: self.localize("tmTDOA")),
                 # ("Localize\nSingle TDOA\nOsc", lambda: self.localize_single_continuous(method="TDOA", signal_type="osc")),
                 # ("Test TDOA\nvs continuous\nOsc", lambda: self.test_TDOA_vs_continuous(method="TDOA", signal_type="osc")),
                 ("Localize\nSingle cTDOA\nFN", lambda: self.localize_single_continuous(method="cTDOA", signal_type="fn")),
-                ("Test TDOA\nvs continuous\nFN", lambda: self.test_TDOA_vs_continuous(method="mTDOA", signal_type="fn")),
+                ("Localize\nSingle mTDOA\nFN", lambda: self.localize_single_continuous(method="mTDOA", signal_type="fn")),
+                ("Start signal\nviews", self.start_signal_views)
+                # ("Test TDOA\nvs continuous\nFN", lambda: self.test_TDOA_vs_continuous(method="mTDOA", signal_type="fn")),
             ]
         ]
 
@@ -199,6 +265,7 @@ class App:
             self.wsn.t0 = float(num)
             self.localize("TDOA")
         option_start_y = gridy
+        self.options = {}
         for c, option_column in enumerate(option_columns):
             gridy = option_start_y
             gridx = c * 3
@@ -218,16 +285,34 @@ class App:
                 option = Option(self.wsn, slider, name, min, max, default, multiplier)
                 slider.config(command=option.command, resolution=resolution)
                 option.command(default)
+                self.options[name] = option
                 if name == "t0":
                     slider.config(command=t0_command)
                 slider.grid(row=gridy, column=gridx+1, columnspan=2)
                 gridy += 1
+        gridy = option_start_y + np.max([len(col) for col in option_columns])
+
+        seed_box = Entry(self.root, width=20)
+        def set_seed(*args):
+            try:
+                seed = int(seed_box.get())
+                np.random.seed(seed)
+                print(f"Reseeded to {seed}")
+            except ValueError:
+                pass
+        seed_box.bind("<Return>", set_seed)
+        set_seed_btn = Button(text="Reseed", command=set_seed)
+
+        seed_box.grid(row=gridy, column=1)
+        set_seed_btn.grid(row=gridy, column=0)
+        gridy += 1
+
             
 
+        plt.close(plt.figure())
         center_window(self.root)
         
         self.running = True
-        plt.figure()
         while self.running:
             self.root.update()
 

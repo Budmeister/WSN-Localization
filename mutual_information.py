@@ -113,10 +113,10 @@ def mi_shift(xs, shifts, do_interactive_graph=False, dt=1):
             fig2.canvas.flush_events()
     return mis
 
-def get_time_delay(xs, shifts, ensure_one_peak=True, closest_to_zero=False, do_interactive_graph=False, show_error=None):
+def get_time_delay(xs, shifts, ensure_one_peak=True, closest_to_zero=False, do_interactive_graph=False, show_error=None, **kwargs):
     mis = mi_shift(xs, shifts, do_interactive_graph=do_interactive_graph)
     mean = np.mean(mis)
-    peaks, properties = find_peaks(mis, height=(mean * 30 if ensure_one_peak else 0))
+    peaks, properties = find_peaks(mis, height=(mean * 30 if ensure_one_peak else 0), **kwargs)
     peaks = shifts[peaks]
     if closest_to_zero:
         if len(peaks) == 0:
@@ -237,14 +237,16 @@ def get_one_way_osc_data(samples, taus, epsilon=0.25, f=None, a=4):
 default_fn_equ_params = {
     'N': 100,
     'n': 100,
-    'T': 3000,
+    'T': 1000,
     'dt': 0.1,
     'D': 1,
     'a': 0.5,
     'b': 0.7,
     'c': 0.3,
     'I0': 1.0,
-    'stim': [[[25, 40], [45, 65], [45, 65]]],
+    # 'stim': [[[25, 40], [45, 65], [45, 65]]],
+    'circular_stim': True,
+    'stim': [[[25, 40], [55, 55], 10]],
     'w_h': 1,
     'w_l': 1,
     # 'noise': 0.02

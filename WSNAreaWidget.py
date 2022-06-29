@@ -59,7 +59,6 @@ class WSNAreaWidget(Canvas):
                         if i not in anchor_nodes else self.anchor_color
                 )
             )
-        self._node_elements = self._node_elements
 
     def clear_est_values(self):
         [self.delete(est_val_element[0], est_val_element[1]) for est_val_element in self._est_val_elements]
