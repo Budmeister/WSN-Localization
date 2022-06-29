@@ -17,37 +17,72 @@ def err(est, real, anchors):
     euclid_dist = np.sqrt(euclid_dist)
     return num_determined, euclid_dist
 
+def test_fn_clusters(
+    num_clusters,
+    cluster_size_range,
+    cluster_spacing_range,
+    iterations,
+    true_center,
+    true_speed
+):
+    import multiprocessing as mp
+    from time import time
+
+    name = mp.current_process().name
+    print(f"Process {name} running with num_clusters={num_clusters}.")
+
+    wsn = WSN(100, N=0, D=142, std=0, verbose=False)
+    wsn.num_clusters = num_clusters
+
+    all_errs = np.zeros((len(cluster_size_range), len(cluster_spacing_range), 2))
+
+    for i, cluster_size in enumerate(cluster_size_range):
+        starttime = time()
+        print(f"Process {name} running with cluster_size={cluster_size}.")
+        wsn.cluster_size = cluster_size
+        for j, cluster_spacing in enumerate(cluster_spacing_range):
+            wsn.cluster_spacing = cluster_spacing
+            avg_errs = np.zeros(2)
+            for it in range(iterations):
+                wsn.reset_clusters()
+                wsn.reset_anchors()
+                est_pos, = wsn.localize_continuous(method="cTDOA", signal_type="fn", return_full_array=True)
+                distance_err = dist(est_pos[:2], true_center)
+                speed = np.sqrt(est_pos[2])
+                speed_err = np.abs(speed - true_speed)
+
+                avg_errs += np.array([distance_err, speed_err])
+            avg_errs /= iterations
+            all_errs[i, j] = avg_errs
+        print(f"Process {name} finished running with cluster_size={cluster_size} after {round(time() - starttime, 1)}s.")
+    return all_errs
 
 def main():
     import matplotlib.pyplot as plt
     from tqdm import tqdm
-    wsn = WSN(100, 11, D=200)
+    import multiprocessing as mp
 
-    num_trials = 100
+    iterations = 500
+    num_clusters_range = range(3, 11)
+    cluster_size_range = range(3, 5)
+    cluster_spacing_range = range(3, 11)
 
-    noise_factors = np.arange(start=0, stop=0.3, step=0.001)
-    successes = []
-    errors = []
-    for nf in tqdm(noise_factors):
-        wsn.std = nf
-        avg_success = 0
-        avg_error = 0
-        for _ in range(num_trials):
-            wsn.reset_nodes()
-            wsn.reset_anchors()
-            est_pos = wsn.localize(method="TDOA")
-            success, error = err(est_pos, wsn.nodes, wsn.anchor_nodes)
-            avg_success += success
-            avg_error += error
-        avg_success /= num_trials
-        avg_error /= num_trials
-        successes.append(avg_success)
-        errors.append(avg_error)
-    
-    plt.figure()
-    plt.plot(noise_factors, successes)
-    plt.plot(noise_factors, errors)
-    plt.show()
+    true_center = np.array([55, 55])
+    true_speed = 1.6424885622140555
+
+    with mp.Pool(len(num_clusters_range)) as pool:
+        results = pool.starmap(test_fn_clusters, (
+            (
+                num_clusters,
+                cluster_size_range,
+                cluster_spacing_range,
+                iterations,
+                true_center,
+                true_speed
+            ) for num_clusters in num_clusters_range)
+        )
+        errs = np.array(results)
+        np.save("./cTDOA_errs.npy", errs)
 
 if __name__ == "__main__":
     main()

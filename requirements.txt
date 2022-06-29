@@ -3,3 +3,4 @@ scipy
 matplotlib
 tk
 py-pde
+tqdm
