@@ -238,7 +238,7 @@ def get_one_way_osc_data(samples, taus, epsilon=0.25, f=None, a=4):
 default_fn_equ_params = {
     'N': 100,
     'n': 100,
-    'T': 1000,
+    'T': 2000,
     'dt': 0.1,
     'D': 1,
     'a': 0.5,
