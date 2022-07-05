@@ -328,7 +328,7 @@ class WSN:
                     # Generate time
                     r0 = np.array([55, 55])
                     # tn = -(dist(rn, r0) - dist(rc, r0)) / self.c
-                    tn = get_time_delay(np.transpose([sign, sigc]), shifts, closest_to_zero=False, ensure_one_peak=False, show_error=True) * dt
+                    tn = get_time_delay(np.transpose([sign, sigc]), shifts, closest_to_zero=True, ensure_one_peak=True, show_error=True) * dt
                     
                     cc = 1.6424885622140555
                     center = np.array([55, 55])

@@ -117,7 +117,7 @@ def mi_shift(xs, shifts, do_interactive_graph=False, dt=1):
 def get_time_delay(xs, shifts, ensure_one_peak=True, closest_to_zero=False, do_interactive_graph=False, show_error=None, **kwargs):
     mis = mi_shift(xs, shifts, do_interactive_graph=do_interactive_graph)
     mean = np.mean(mis)
-    peaks, properties = find_peaks(mis, height=(mean * 30 if ensure_one_peak else 0), **kwargs)
+    peaks, properties = find_peaks(mis, height=(mean * 5 if ensure_one_peak else 0), **kwargs)
     peaks = shifts[peaks]
     if closest_to_zero:
         if len(peaks) == 0:
@@ -245,9 +245,9 @@ default_fn_equ_params = {
     'b': 0.7,
     'c': 0.3,
     'I0': 1.0,
-    # 'stim': [[[25, 40], [45, 65], [45, 65]]],
-    'circular_stim': True,
-    'stim': [[[25, 40], [55, 55], 10]],
+    'stim': [[[25, 40], [45, 65], [45, 65]]],
+    # 'circular_stim': True,
+    # 'stim': [[[25, 40], [55, 55], 10]],
     'w_h': 1,
     'w_l': 1,
     # 'noise': 0.02
@@ -288,7 +288,7 @@ def get_fn_data(samples, nodes, use_default_equ=True, initial_state=None, *args,
         eq.solve(initial_state, t_range=samples * dt, tracker=[memory_storage.tracker(dt)])
         data = np.array(memory_storage.data)
     
-    signals = np.array([data[:, :, int(node[0]), int(node[1])] for node in nodes], copy=False)
+    signals = np.array([data[400:, :, int(node[0]), int(node[1])] for node in nodes], copy=False)
     # signals.shape = (t, vw)
     return signals
         
