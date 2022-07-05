@@ -121,6 +121,16 @@ class WSN:
 
     # Get the results of transmitting from the given node
     def transmit(self, i, r0, t0=0):
+        """
+        Gets transmission data from node `i` at position `r0` at time `t0`.
+
+        Returns:
+            `results` (`list`) of the form `[(rn, tn0, norm(rn - r0), Pr), ...]` where 
+            * `rn` is the position of the node receiving the signal,
+            * `tn0` is the time of the received signal relative to the time of transmission,
+            * `norm(rn - r0)` is the direction of the received signal, and
+            * `Pr` is the power of the received signal. (The signal is transmitted with a power of `self.Pr`.)
+        """
         results = []
         for j in self.known_nodes:
             if i == j:
@@ -145,6 +155,44 @@ class WSN:
         return results
     
     def transmit_continuous(self, i=None, r0=None, signal_type="ar", return_taus=False):
+        """
+        Gets coninuous transmission data from node `i` at position `r0`. `signal_type` is the type
+        of the signal, `"ar"` for Gaussian Auto-Regressive, `"osc"` for an oscillator of the form
+        $x_{t+1}=f(x_t) + \\epsilon g(x_t, x_{t-\\tau}))$, "fn" for the FitzHugh-Nagumo model.
+
+        Unless `signal_type` is `"fn"`, the time differences, taus, will be calculated using the 
+        distance between the transmission node and the receiving node and the speed, `self.c`.
+
+        If `signal_type` is `"fn"`, the received signals will be drawn from the default fn solution,
+        `mtin.default_fn_sol`. If the solution has not been found yet, the equation will be solved
+        using `mtin.solve_default_fn_equ()`. 
+
+        Args:
+            `i` (`int`, optional):
+                The index of the transmitting node. Not required if `signal_type` is `"fn"`.
+
+            `r0` (`np.ndarray`, optional):
+                The position of the transmitting node. Not required if `signal_type` is `"fn"`.
+
+            `signal_type` (`str`, optional):
+                The type of the signal to be returned; either `"ar"`, `"osc"`, or `"fn"`. 
+                If not specified, `"ar"` will be used by default.
+
+            `return_taus` (`bool`, optional):
+                If `signal_type` is `"ar"` or `"osc"`, the time differences, taus, will be calculated
+                while generating the signals. If `return_taus` is `True`, then those taus will
+                be returned along with the results as a `list` of integers. `False` by default.
+                If `signal_type` is `"fn"`, then `return_taus` should be false. Otherwise, a 
+                `ValueError` will be raised.
+        
+        Returns:
+            `results` (`list`) of the form `[(rn, sign), ...]` where 
+            * `rn` is the position of the node receiving the signal, and
+            * `sign` is an `ndarray` which contains the signal
+
+            `taus` (`list`, sometimes)
+                the time differences used for each signal if `return_taus` is `True`
+        """
         signal_types = {
             "ar": lambda: get_one_way_ar_data(self.samples, self.ar_b, taus, self.ar_std),
             "osc": lambda: get_one_way_osc_data(self.samples, taus, self.epsilon, a=4),
@@ -187,6 +235,9 @@ class WSN:
             raise ValueError(f"Invalid type {signal_type}")
 
     def get_TDOA_H_and_b(self, results, *args, **kwargs):
+        """
+        accepts `results` in the form returned by `transmit`
+        """
         r1, t10, *_ = results[0]
 
         # No transpose, because "rn - r1" are being inserted as rows
@@ -266,6 +317,9 @@ class WSN:
         return MST
 
     def get_mTDOA_H_and_b_with_tree(self, results, *args, **kwargs):
+        """
+        accepts `results` in the form returned by `transmit`
+        """
         r1, t10, *_ = results[0]
         t10_2 = t10 ** 2
 
@@ -283,6 +337,10 @@ class WSN:
 
     
     def get_mTDOA_H_and_b_row(self, res_1, res_n):
+        """
+        Returns one row of H and one element of b comparing the two results given. The results
+        should be in the form returned by `transmit`.
+        """
         r1, t10, *_ = res_1
         rn, tn0, *_ = res_n
         Hn = np.array([*(2 * (rn - r1)), -2 * (tn0 - t10), tn0 ** 2 - t10 ** 2])
@@ -291,6 +349,9 @@ class WSN:
 
 
     def get_mTDOA_H_and_b(self, results, *args, **kwargs):
+        """
+        accepts `results` in the form returned by `transmit`
+        """
         r1, t10, *_ = results[0]
         t10_2 = t10 ** 2
         
@@ -309,6 +370,9 @@ class WSN:
         return H, b
     
     def get_cTDOA_H_and_b(self, results, max_tau=200, *args, **kwargs):
+        """
+        accepts `results` in the form returned by `transmit_continuous`
+        """
         num_clusters = self.num_clusters
         cluster_size = self.cluster_size
         nodes = np.array([node for node, *_ in results])
@@ -344,6 +408,9 @@ class WSN:
         return H, b
 
     def get_TOA_H_and_b(self, results, *args, **kwargs):
+        """
+        accepts `results` in the form returned by `transmit`
+        """
         r1, t10, *_ = results[0]
 
         # No transpose, because "rn - r1" are being inserted as rows
@@ -360,6 +427,9 @@ class WSN:
         return self.c / (4 * np.pi * self.Fc) * np.sqrt(self.Pt / Pr)
 
     def get_RSS_H_and_b(self, results, *args, **kwargs):
+        """
+        accepts `results` in the form returned by `transmit`
+        """
         r1, t10, no1, Pr1, *_ = results[0]
 
         # No transpose, because "rn - r1" are being inserted as rows
