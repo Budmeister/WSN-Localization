@@ -99,6 +99,20 @@ class WSN:
         self.MST = None
         self.printv(self.num_clusters, self.cluster_size)
     
+    def reset_nodes_bounding_box(self, bb: tuple = None, width=50, height=50):
+        # bb = (xmin, ymin, xmax, ymax)
+        if bb is None:
+            xmin = np.random.uniform(0, self.size - width)
+            ymin = np.random.uniform(0, self.size - height)
+            xmax = xmin + width
+            ymax = ymin + height
+        else:
+            xmin, ymin, xmax, ymax = bb
+        self.nodes = np.empty((self.N, 2))
+        self.nodes[:, 0] = np.random.uniform(xmin, xmax, size=self.N)
+        self.nodes[:, 1] = np.random.uniform(ymin, ymax, size=self.N)
+        self.printv(self.N)
+    
     def clear_nodes(self):
         self.N = 0
         self.num_anchors = 0
@@ -154,7 +168,7 @@ class WSN:
             )
         return results
     
-    def transmit_continuous(self, i=None, r0=None, signal_type="ar", return_taus=False):
+    def transmit_continuous(self, i=None, r0=None, signal_type="ar", return_taus=False, **kwargs):
         """
         Gets coninuous transmission data from node `i` at position `r0`. `signal_type` is the type
         of the signal, `"ar"` for Gaussian Auto-Regressive, `"osc"` for an oscillator of the form
@@ -194,9 +208,9 @@ class WSN:
                 the time differences used for each signal if `return_taus` is `True`
         """
         signal_types = {
-            "ar": lambda: get_one_way_ar_data(self.samples, self.ar_b, taus, self.ar_std),
-            "osc": lambda: get_one_way_osc_data(self.samples, taus, self.epsilon, a=4),
-            "fn": lambda: get_fn_data(self.samples, receivers, use_default_equ=True)
+            "ar": lambda: get_one_way_ar_data(self.samples, self.ar_b, taus, self.ar_std, **kwargs),
+            "osc": lambda: get_one_way_osc_data(self.samples, taus, self.epsilon, a=4, **kwargs),
+            "fn": lambda: get_fn_data(self.samples, receivers, use_default_equ=True, **kwargs)
         }
         get_data = signal_types[signal_type]
         if signal_type == "ar" or signal_type == "osc":
@@ -368,6 +382,32 @@ class WSN:
             for n, (rn, tn0, *_) in enumerate(results) if n != 0
         ])
         return H, b
+
+    def get_cTDOA_H_and_b_submatrix(self, results, num_clusters, c, *args, **kwargs):
+        """
+        accepts `results` in the form returned by `transmit`, only the results for this cluster
+
+        Returns:
+            `H` (`ndarray` containing only the rows for this cluster)
+            
+            `b` (`ndarray` containing only the entries for this cluster)
+        """
+        cluster_size = len(results)
+        H = np.zeros((cluster_size, num_clusters + 3))
+        b = np.zeros(cluster_size)
+        rc, tc = results[0]
+        # for node, time in results:
+        for n in range(1, cluster_size):
+            rn, tn = results[n]
+            Hn = np.zeros(num_clusters + 3)
+            Hn[:2] = 2 * (rn - rc)
+            # tc should equal zero, but in case it doesn't...
+            Hn[2] = (tn - tc) ** 2
+            Hn[c + 3] = -2 * (tn - tc)
+            H[n] = Hn
+            b[n] = rn @ rn - rc @ rc
+        return H, b
+        
     
     def get_cTDOA_H_and_b(self, results, max_tau=200, *args, **kwargs):
         """
@@ -378,6 +418,7 @@ class WSN:
         nodes = np.array([node for node, *_ in results])
         clusters = np.array([nodes[c * cluster_size:(c+1) * cluster_size] for c in range(num_clusters)])
         if clusters.ndim != 3:
+            # Jagged nested arrays
             raise ValueError("Not enough nodes")
         dt = default_fn_equ_params["dt"]
         H = np.zeros((num_clusters * (cluster_size-1), num_clusters + 3))

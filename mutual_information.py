@@ -275,7 +275,7 @@ def solve_default_fn_equ(resolve=False):
         default_fn_sol = np.array(memory_storage.data)
     # save_params(default_fn_equ_params, "./default_fn_equ_params.json")
 
-def get_fn_data(samples, nodes, use_default_equ=True, initial_state=None, *args, **kwargs):
+def get_fn_data(samples, nodes, use_default_equ=True, initial_state=None, start_frame=400, *args, **kwargs):
     if use_default_equ:
         solve_default_fn_equ()
         data = default_fn_sol
@@ -288,7 +288,7 @@ def get_fn_data(samples, nodes, use_default_equ=True, initial_state=None, *args,
         eq.solve(initial_state, t_range=samples * dt, tracker=[memory_storage.tracker(dt)])
         data = np.array(memory_storage.data)
     
-    signals = np.array([data[400:, :, int(node[0]), int(node[1])] for node in nodes], copy=False)
+    signals = np.array([data[start_frame:, :, int(node[0]), int(node[1])] for node in nodes], copy=False)
     # signals.shape = (t, vw)
     return signals
         
