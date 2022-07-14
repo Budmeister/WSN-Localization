@@ -5,3 +5,4 @@ tk
 py-pde
 tqdm
 tensorflow
+opencv-python

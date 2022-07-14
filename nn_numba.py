@@ -1,15 +1,18 @@
 import numpy as np
+from numba import jit
 from scipy.signal import find_peaks
-
-from matplotlib import pyplot as plt
 
 from tqdm import tqdm
 import json
 
-from WSN import *
+from WSN import WSN
+from fn import FHN
 import mutual_information as mtin
+from nn_numba_funcs import *
 
 
+dt = 0.01
+T = 20000
 mtin.default_fn_equ_params["dt"] = 0.01
 mtin.default_fn_equ_params["T"] = 20_000
 mtin.default_fn_equ_params['stim'] = [[[250, 350], [45, 65], [45, 65]]]
@@ -23,25 +26,28 @@ if mtin.default_fn_sol is None:
 
 # np.save("default_fn_sol_dt_0.01.npy", mtin.default_fn_sol)
 
+
 # Generate signals and find all peaks
-def get_fn_peaks_inside_period(self: WSN, r0=None, use_mst=False):
+# @jit(nopython=True)
+def get_fn_peaks_inside_period(nodes, c, r0=None):
     if r0 is None:
         r0 = np.array([55, 55])
-    results = self.transmit_continuous(signal_type="fn", start_frame=start_frame)
-    assert np.all(np.array([result[0] for result in results]) == self.nodes)
-    dt = mtin.default_fn_equ_params["dt"]
-    T  = mtin.default_fn_equ_params["T"]
+    results = transmit_continuous(nodes, start_frame=start_frame)
+    # assert np.all(np.array([result[0] for result in results]) == nodes)
     # This is arbitrary, but I know this will work for this case
     max_tau = T // 5
 
-    self.printv("Finding period")
+    # self.printv("Finding period")
     avg_period = 0
     for i, sigi in results:
         shifts = np.arange(-max_tau, max_tau, 1)
-        mis = mi_shift(np.transpose([sigi, sigi]), shifts)
+        sigs = np.empty((len(sigi), 2))
+        sigs[:, 0] = sigi
+        sigs[:, 1] = sigi
+        mis = mi_shift(sigs, shifts)
 
-        mis = np.array(mis)
         max_peak = mis.max()
+        peaks: np.ndarray
         peaks, _ = find_peaks(mis)
         peaks = peaks[np.argsort(mis[peaks])]
         peaks = peaks[-5:]
@@ -52,39 +58,33 @@ def get_fn_peaks_inside_period(self: WSN, r0=None, use_mst=False):
         period *= dt
         avg_period += period
     avg_period /= len(results)
-    self.printv("Period found to be", avg_period)
+    # self.printv("Period found to be", avg_period)
 
-    all_peaks = []   # [(rn, rm, p, p0), ...]
-    pair_to_ind = {} # {(n, m): i}
+    all_peaks = np.empty((len(nodes - 1), 2))   # [(rn, rm, p, p0), ...]
+    b = 0
 
     # For now, tree must be a list so that the neural network
     # sees the peaks in the same order every time
-    if use_mst:
-        tree = list(self.find_MST())
-    else:
-        tree = [
-            (None, 0, i)
-            for i in range(1, len(self.nodes))
-        ]
-    for _, i, j in tree:
+    tree = np.array([
+        (0, i)
+        for i in range(1, len(nodes))
+    ])
+    for i, j in tree:
         ri, sigi = results[i]
         rj, sigj = results[j]
         max_tau = int((2 * avg_period) / dt)
         shifts = np.arange(-max_tau, max_tau, 1)
-        mis = mtin.mi_shift(np.transpose([sigi, sigj]), shifts)
+        sigs = np.empty((len(sigi), 2))
+        sigs[:, 0] = sigi
+        sigs[:, 1] = sigj
+        mis = mi_shift(sigs, shifts)
 
-        mis = np.array(mis)
         max_peak = mis.max()
         inclusion_factor = 0.5
         peaks, _ = find_peaks(mis, height=max_peak * inclusion_factor)
-        if self.verbose and np.random.uniform(0, 1) < 0.1:
-            plt.plot(shifts, mis)
-            plt.show(block=False)
         if len(peaks) == 0:
-            plt.plot(shifts * dt, mis)
-            plt.show(block=False)
-            p = (dist(ri, r0) - dist(rj, r0)) / self.c
-            raise ValueError(
+            p = (dist(ri, r0) - dist(rj, r0)) / c
+            print(
                 f"No peaks found between nodes {i} and {j} "
                 f"at positions {ri} and {rj}.\n"
                 f"The peak should be at time {p}."
@@ -94,14 +94,16 @@ def get_fn_peaks_inside_period(self: WSN, r0=None, use_mst=False):
         p0 = peaks[np.argmin(np.abs(peaks))]
 
         # p = ideal peak
-        p = (dist(ri, r0) - dist(rj, r0)) / self.c
-        pair_to_ind[(i, j)] = len(all_peaks)
-        all_peaks.append((ri, rj, p, p0))
-    return all_peaks, pair_to_ind, avg_period
+        p = (dist(ri, r0) - dist(rj, r0)) / c
+        # all_peaks.append((p, p0))
+        all_peaks[b] = (p, p0)
+        b += 1
 
-[setattr(WSN, attr, globals()[attr]) for attr in (
-    "get_fn_peaks_inside_period",
-)]
+    return all_peaks, avg_period
+
+# [setattr(WSN, attr, globals()[attr]) for attr in (
+#     "get_fn_peaks_inside_period",
+# )]
 
 N = 12
 c = 1.6424885622140555
@@ -109,7 +111,7 @@ wsn = WSN(100, N, D=142, std=0, c=c, verbose=False)
 wsn.reset_anchors(range(N))
 
 def get_input_and_output(wsn: WSN):
-    all_peaks, pair_to_ind, period = wsn.get_fn_peaks_inside_period()
+    all_peaks, period = get_fn_peaks_inside_period(wsn.nodes, wsn.c)
     # Input format:
     # [
     #   wsn.nodes.flatten() -- len = 2N,
@@ -121,7 +123,7 @@ def get_input_and_output(wsn: WSN):
     # peaks -- len = N-1
     input = []
     output = []
-    for ri, rj, p, p0 in all_peaks:
+    for p, p0 in all_peaks:
         input.append(p0 / period)
         output.append(p / period)
     input.append(period)
@@ -147,8 +149,15 @@ for j in tqdm(range(data_size)):
         except ValueError as e:
             print(f"ValueError: {e}")
             error = True
+    if j % 100 == 0 and j != 0:
+        np.save(f"nn_saves/orig/input{j}.npy", np.array(input))
+        np.save(f"nn_saves/orig/input{j}.npy", np.array(input))
+        np.save(f"nn_saves/copy/output{j}.npy", np.array(output))
+        np.save(f"nn_saves/copy/output{j}.npy", np.array(output))
 input = np.array(input)
 output = np.array(output)
 
-np.save("nn_saves/input2000.npy", input)
-np.save("nn_saves/output2000.npy", output)
+np.save("nn_saves/orig/input2000.npy", input)
+np.save("nn_saves/orig/output2000.npy", output)
+np.save("nn_saves/copy/input2000.npy", input)
+np.save("nn_saves/copy/output2000.npy", output)

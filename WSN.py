@@ -26,7 +26,7 @@ class WSN:
         size,
         N,
         Fc=2.4e9,
-        D=30,
+        D=0,
         c=100,
         Pt=1,
         std=0,
@@ -43,7 +43,7 @@ class WSN:
         self.size = size
         self.N = N
         self.Fc = Fc
-        self.D = D
+        self.D = D if D != 0 else size * np.sqrt(2)
         self.c = c
         self.Pt = Pt
         self.nodes = np.zeros((0, 2))
