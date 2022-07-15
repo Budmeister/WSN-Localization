@@ -60,7 +60,7 @@ def get_fn_peaks_inside_period(nodes, c, r0=None):
     avg_period /= len(results)
     # self.printv("Period found to be", avg_period)
 
-    all_peaks = np.empty((len(nodes - 1), 2))   # [(rn, rm, p, p0), ...]
+    all_peaks = np.empty((len(nodes) - 1, 2))   # [(rn, rm, p, p0), ...]
     b = 0
 
     # For now, tree must be a list so that the neural network
@@ -150,14 +150,14 @@ for j in tqdm(range(data_size)):
             print(f"ValueError: {e}")
             error = True
     if j % 100 == 0 and j != 0:
-        np.save(f"nn_saves/orig/input{j}.npy", np.array(input))
-        np.save(f"nn_saves/orig/input{j}.npy", np.array(input))
-        np.save(f"nn_saves/copy/output{j}.npy", np.array(output))
-        np.save(f"nn_saves/copy/output{j}.npy", np.array(output))
+        np.save(f"nn_saves/orig/(2) input{j}.npy", np.array(input[:j]))
+        np.save(f"nn_saves/copy/(2) input{j}.npy", np.array(input[:j]))
+        np.save(f"nn_saves/orig/(2) output{j}.npy", np.array(output[:j]))
+        np.save(f"nn_saves/copy/(2) output{j}.npy", np.array(output[:j]))
 input = np.array(input)
 output = np.array(output)
 
-np.save("nn_saves/orig/input2000.npy", input)
-np.save("nn_saves/orig/output2000.npy", output)
-np.save("nn_saves/copy/input2000.npy", input)
-np.save("nn_saves/copy/output2000.npy", output)
+np.save(f"nn_saves/orig/(2) input{data_size}.npy", input)
+np.save(f"nn_saves/copy/(2) input{data_size}.npy", input)
+np.save(f"nn_saves/orig/(2) output{data_size}.npy", output)
+np.save(f"nn_saves/copy/(2) output{data_size}.npy", output)
