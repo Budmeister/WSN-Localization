@@ -106,12 +106,14 @@ class WSN:
             ymin = np.random.uniform(0, self.size - height)
             xmax = xmin + width
             ymax = ymin + height
+            bb = (xmin, ymin, xmax, ymax)
         else:
             xmin, ymin, xmax, ymax = bb
         self.nodes = np.empty((self.N, 2))
         self.nodes[:, 0] = np.random.uniform(xmin, xmax, size=self.N)
         self.nodes[:, 1] = np.random.uniform(ymin, ymax, size=self.N)
         self.printv(self.N)
+        return bb
     
     def clear_nodes(self):
         self.N = 0
