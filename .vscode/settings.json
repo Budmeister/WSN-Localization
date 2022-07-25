@@ -1,0 +1,6 @@
+{
+    "python.analysis.diagnosticMode": "openFilesOnly",
+    "python.analysis.autoSearchPaths": true,
+    "python.analysis.extraCommitChars": true,
+    "python.analysis.indexing": false
+}

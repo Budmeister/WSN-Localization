@@ -1,6 +1,6 @@
 from typing import Iterable
 import numpy as np
-from mutual_information import *
+# from mutual_information import *
 import mutual_information as mtin
 # Import as mtin to access dynamic global variables from mtin
 
@@ -99,7 +99,11 @@ class WSN:
         self.MST = None
         self.printv(self.num_clusters, self.cluster_size)
     
-    def reset_nodes_bounding_box(self, bb: tuple = None, width=50, height=50):
+    def reset_nodes_bounding_box(self, bb: tuple = None, width=None, height=None):
+        if width is None:
+            width = self.size / 2
+        if height is None:
+            height = self.size / 2
         # bb = (xmin, ymin, xmax, ymax)
         if bb is None:
             xmin = np.random.uniform(0, self.size - width)
@@ -210,9 +214,9 @@ class WSN:
                 the time differences used for each signal if `return_taus` is `True`
         """
         signal_types = {
-            "ar": lambda: get_one_way_ar_data(self.samples, self.ar_b, taus, self.ar_std, **kwargs),
-            "osc": lambda: get_one_way_osc_data(self.samples, taus, self.epsilon, a=4, **kwargs),
-            "fn": lambda: get_fn_data(self.samples, receivers, use_default_equ=True, **kwargs)
+            "ar": lambda: mtin.get_one_way_ar_data(self.samples, self.ar_b, taus, self.ar_std, **kwargs),
+            "osc": lambda: mtin.get_one_way_osc_data(self.samples, taus, self.epsilon, a=4, **kwargs),
+            "fn": lambda: mtin.get_fn_data(self.samples, receivers, use_default_equ=True, **kwargs)
         }
         get_data = signal_types[signal_type]
         if signal_type == "ar" or signal_type == "osc":
@@ -422,7 +426,7 @@ class WSN:
         if clusters.ndim != 3:
             # Jagged nested arrays
             raise ValueError("Not enough nodes")
-        dt = default_fn_equ_params["dt"]
+        dt = mtin.default_fn_equ_params["dt"]
         H = np.zeros((num_clusters * (cluster_size-1), num_clusters + 3))
         b = np.zeros(num_clusters * (cluster_size-1))
         shifts = np.arange(-max_tau, max_tau, 1)
@@ -435,7 +439,7 @@ class WSN:
                     # Generate time
                     r0 = np.array([55, 55])
                     # tn = -(dist(rn, r0) - dist(rc, r0)) / self.c
-                    tn = get_time_delay(np.transpose([sign, sigc]), shifts, closest_to_zero=True, ensure_one_peak=True, show_error=True) * dt
+                    tn = mtin.get_time_delay(np.transpose([sign, sigc]), shifts, closest_to_zero=True, ensure_one_peak=True, show_error=True) * dt
                     
                     cc = 1.6424885622140555
                     center = np.array([55, 55])
@@ -489,7 +493,7 @@ class WSN:
         pass
 
     def localize_fn_continuous(self, method="mTDOA", return_full_array=False, *args, **kwargs):
-        self.dt = default_fn_equ_params["dt"]
+        self.dt = mtin.default_fn_equ_params["dt"]
         methods = {
             "mTDOA": self.get_mTDOA_H_and_b,
             "cTDOA": self.get_cTDOA_H_and_b,
@@ -531,7 +535,7 @@ class WSN:
                 if rc in delays:
                     continue
                 sigc = results[rc]
-                delay = get_time_delay(np.transpose([sigc, sigr]), shifts=shifts, ensure_one_peak=False)
+                delay = mtin.get_time_delay(np.transpose([sigc, sigr]), shifts=shifts, ensure_one_peak=False)
                 delays[rc] = delays[root] + delay * self.dt
                 get_child_delays(rc)
         get_child_delays(r0)
@@ -579,7 +583,7 @@ class WSN:
                 shifts = np.arange(-max_tau, max_tau, 1)
                 for _, result in enumerate(results, 1):
                     xs = np.transpose([sig0, result[1]])
-                    tau = get_time_delay(xs, shifts, show_error=show_error)
+                    tau = mtin.get_time_delay(xs, shifts, show_error=show_error)
                     new_results.append((result[0], -tau * self.dt))
                 
                 H, b = get_H_and_b(new_results)

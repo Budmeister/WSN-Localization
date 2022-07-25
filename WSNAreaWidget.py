@@ -17,6 +17,7 @@ class WSNAreaWidget(Canvas):
         self._node_elements = []
         self._est_val_elements = []
         self._other_val_elements = []
+        self._bounding_box = None
 
         self.default_color = "black"
         self.default_color_with_bg = "red"
@@ -116,4 +117,15 @@ class WSNAreaWidget(Canvas):
                     )
                 )
             )
+    
+    def clear_bounding_box(self):
+        if self._bounding_box is not None:
+            self.delete(self._bounding_box)
+    
+    def set_bounding_box(self, bb):
+        xmin, ymin, xmax, ymax = bb
+        xmin, ymin = self.node2pix(np.array([xmin, ymin]))
+        xmax, ymax = self.node2pix(np.array([xmax, ymax]))
+        self.clear_bounding_box()
+        self._bounding_box = self.create_rectangle(xmin, ymin, xmax, ymax)
 

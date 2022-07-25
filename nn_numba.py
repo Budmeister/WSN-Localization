@@ -105,11 +105,6 @@ def get_fn_peaks_inside_period(nodes, c, r0=None):
 #     "get_fn_peaks_inside_period",
 # )]
 
-N = 12
-c = 1.6424885622140555
-wsn = WSN(100, N, D=142, std=0, c=c, verbose=False)
-wsn.reset_anchors(range(N))
-
 def get_input_and_output(wsn: WSN):
     all_peaks, period = get_fn_peaks_inside_period(wsn.nodes, wsn.c)
     # Input format:
@@ -132,32 +127,38 @@ def get_input_and_output(wsn: WSN):
 
     return input, output
 
-data_size = 2000
-# input_shape = (data_size, 3 * N)
-# output_shape = (data_size, N - 1)
-input = [0] * data_size
-output = [0] * data_size
-for j in tqdm(range(data_size)):
-    error = True
-    while error:
-        error = False
-        try:
-            wsn.reset_nodes()
-            i, o = get_input_and_output(wsn)
-            input[j] = i
-            output[j] = o
-        except ValueError as e:
-            print(f"ValueError: {e}")
-            error = True
-    if j % 100 == 0 and j != 0:
-        np.save(f"nn_saves/orig/(2) input{j}.npy", np.array(input[:j]))
-        np.save(f"nn_saves/copy/(2) input{j}.npy", np.array(input[:j]))
-        np.save(f"nn_saves/orig/(2) output{j}.npy", np.array(output[:j]))
-        np.save(f"nn_saves/copy/(2) output{j}.npy", np.array(output[:j]))
-input = np.array(input)
-output = np.array(output)
+if __name__ == "__main__":
+    N = 12
+    c = 1.6424885622140555
+    wsn = WSN(100, N, D=142, std=0, c=c, verbose=False)
+    wsn.reset_anchors(range(N))
 
-np.save(f"nn_saves/orig/(2) input{data_size}.npy", input)
-np.save(f"nn_saves/copy/(2) input{data_size}.npy", input)
-np.save(f"nn_saves/orig/(2) output{data_size}.npy", output)
-np.save(f"nn_saves/copy/(2) output{data_size}.npy", output)
+    data_size = 2000
+    # input_shape = (data_size, 3 * N)
+    # output_shape = (data_size, N - 1)
+    input = [0] * data_size
+    output = [0] * data_size
+    for j in tqdm(range(data_size)):
+        error = True
+        while error:
+            error = False
+            try:
+                wsn.reset_nodes()
+                i, o = get_input_and_output(wsn)
+                input[j] = i
+                output[j] = o
+            except ValueError as e:
+                print(f"ValueError: {e}")
+                error = True
+        if j % 100 == 0 and j != 0:
+            np.save(f"nn_saves/orig/(2) input{j}.npy", np.array(input[:j]))
+            np.save(f"nn_saves/copy/(2) input{j}.npy", np.array(input[:j]))
+            np.save(f"nn_saves/orig/(2) output{j}.npy", np.array(output[:j]))
+            np.save(f"nn_saves/copy/(2) output{j}.npy", np.array(output[:j]))
+    input = np.array(input)
+    output = np.array(output)
+
+    np.save(f"nn_saves/orig/(2) input{data_size}.npy", input)
+    np.save(f"nn_saves/copy/(2) input{data_size}.npy", input)
+    np.save(f"nn_saves/orig/(2) output{data_size}.npy", output)
+    np.save(f"nn_saves/copy/(2) output{data_size}.npy", output)

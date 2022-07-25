@@ -291,7 +291,90 @@ def get_fn_data(samples, nodes, use_default_equ=True, initial_state=None, start_
     signals = np.array([data[start_frame:, :, int(node[0]), int(node[1])] for node in nodes], copy=False)
     # signals.shape = (t, vw)
     return signals
-        
+
+def dist2(r1: np.ndarray, r2: np.ndarray):
+    diff = r1 - r2
+    return np.dot(diff, diff)
+
+def dist(r1: np.ndarray, r2: np.ndarray):
+    return np.sqrt(dist2(r1, r2))
+
+
+def get_fn_peaks_inside_period(results, c, r0=None, T=None, dt=None):
+    if r0 is None:
+        r0 = np.array([55, 55])
+    if T is None:
+        T = default_fn_equ_params["T"]
+    if dt is None:
+        dt = default_fn_equ_params["dt"]
+    # assert np.all(np.array([result[0] for result in results]) == nodes)
+    # This is arbitrary, but I know this will work for this case
+    max_tau = T // 5
+
+    # self.printv("Finding period")
+    avg_period = 0
+    for i, sigi in results:
+        shifts = np.arange(-max_tau, max_tau, 1)
+        sigs = np.empty((len(sigi), 2))
+        sigs[:, 0] = sigi
+        sigs[:, 1] = sigi
+        mis = mi_shift(sigs, shifts)
+        mis = np.array(mis)
+
+        max_peak = mis.max()
+        peaks: np.ndarray
+        peaks, _ = find_peaks(mis)
+        peaks = peaks[np.argsort(mis[peaks])]
+        peaks = peaks[-5:]
+        peaks.sort()
+        period1 = peaks[1] - peaks[0]
+        period2 = peaks[2] - peaks[1]
+        period = (period1 + period2) / 2
+        period *= dt
+        avg_period += period
+    avg_period /= len(results)
+    # self.printv("Period found to be", avg_period)
+
+    all_peaks = np.empty((len(results) - 1, 2))   # [(rn, rm, p, p0), ...]
+    b = 0
+
+    # For now, tree must be a list so that the neural network
+    # sees the peaks in the same order every time
+    tree = np.array([
+        (0, i)
+        for i in range(1, len(results))
+    ])
+    for i, j in tree:
+        ri, sigi = results[i]
+        rj, sigj = results[j]
+        max_tau = int((2 * avg_period) / dt)
+        shifts = np.arange(-max_tau, max_tau, 1)
+        sigs = np.empty((len(sigi), 2))
+        sigs[:, 0] = sigi
+        sigs[:, 1] = sigj
+        mis = mi_shift(sigs, shifts)
+
+        max_peak = max(mis)
+        inclusion_factor = 0.5
+        peaks, _ = find_peaks(mis, height=max_peak * inclusion_factor)
+        if len(peaks) == 0:
+            p = (dist(ri, r0) - dist(rj, r0)) / c
+            print(
+                f"No peaks found between nodes {i} and {j} "
+                f"at positions {ri} and {rj}.\n"
+                f"The peak should be at time {p}."
+            )
+        peaks = shifts[peaks]
+        # p0 = peak closest to 0
+        p0 = peaks[np.argmin(np.abs(peaks))] * dt
+
+        # p = ideal peak
+        p = (dist(ri, r0) - dist(rj, r0)) / c
+        # all_peaks.append((p, p0))
+        all_peaks[b] = (p, p0)
+        b += 1
+
+    return all_peaks, avg_period
 
 def main():
     # "de" or "ar" or "osc"

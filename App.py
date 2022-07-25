@@ -1,4 +1,5 @@
 from tkinter import *
+
 from WSN import *
 from WSNAreaWidget import WSNAreaWidget
 from global_funcs import *
@@ -27,6 +28,15 @@ class App:
         self.wsn_area.clear_other_values()
         self.wsn.reset_clusters()
         self.wsn.reset_anchors()
+        self.wsn_area.set_nodes(self.wsn.nodes, self.wsn.anchor_nodes)
+
+    def reset_nodes_bounding_box(self, *args, **kwargs):
+        self.wsn_area.clear_nodes()
+        self.wsn_area.clear_est_values()
+        self.wsn_area.clear_other_values()
+        bb = self.wsn.reset_nodes_bounding_box(*args, **kwargs)
+        self.wsn.reset_anchors()
+        self.wsn_area.set_bounding_box(bb)
         self.wsn_area.set_nodes(self.wsn.nodes, self.wsn.anchor_nodes)
     
     def clear_nodes(self):
@@ -148,49 +158,112 @@ class App:
     def start_signal_views(self):
         self.signal_views = not self.signal_views
 
-    def mouse_click_event(self, event, button):
-        if button in (1, 3):
-            zoom = 5
-            x, y = event.x, event.y
-            node = np.array([x / zoom, y / zoom])
-            self.wsn.nodes = np.concatenate((self.wsn.nodes, [node]), axis=0)
-            self.wsn.N = len(self.wsn.nodes)
-            self.wsn_area.set_nodes([node], [])
-            dt = mtin.default_fn_equ_params["dt"]
-            if self.signal_views:
+    def start_mouse_add_node(self):
+        self.mouse_add_node = not self.mouse_add_node
+        if self.mouse_add_node:
+            self.mouse_move_fn_target = False
+    
+    def start_mouse_fn_target(self):
+        self.mouse_move_fn_target = not self.mouse_move_fn_target
+        if self.mouse_move_fn_target:
+            self.mouse_add_node = False
+            self.signal_views = False
+
+    def mouse_click_event(self, event, button, dragged):
+        zoom = 5
+        if self.mouse_add_node:
+            if not dragged:
+                if button in (1, 3):
+                    x, y = event.x, event.y
+                    node = np.array([x / zoom, y / zoom])
+                    self.wsn.nodes = np.concatenate((self.wsn.nodes, [node]), axis=0)
+                    self.wsn.N = len(self.wsn.nodes)
+                    self.wsn_area.set_nodes([node], [])
+                    dt = mtin.default_fn_equ_params["dt"]
+                    if self.signal_views:
+                        plt.ion()
+                        fig = plt.figure("Signal Values")
+                        data: np.ndarray = mtin.default_fn_sol[:, 0, x // zoom, y // zoom]
+                        T = len(data)
+                        plt.plot(np.linspace(0, T, T, endpoint=False) * dt, data)
+                        fig.show()
+
+                        if self.wsn.N >= 2:
+                            # Show mis if there are two graphs
+                            max_tau = 200
+                            shifts = np.arange(-max_tau, max_tau, 1)
+                            xp, yp = self.wsn.nodes[-2].astype(np.int32)
+                            sigp: np.ndarray = mtin.default_fn_sol[:, 0, xp, yp]
+                            mis = mtin.mi_shift(np.transpose([sigp, data]), shifts, dt=dt)
+                            peaks, properties = find_peaks(mis, height=0)
+                            print(shifts[peaks] * dt)
+                            peak = shifts[peaks[np.argmax(properties["peak_heights"])]] * dt
+                            c = 1.6424885622140555
+                            center = np.array([55, 55])
+                            real_dt = (dist(node, center) - dist(self.wsn.nodes[-2], center)) / c
+                            print(peak, real_dt)
+
+                            fig = plt.figure("MIs")
+                            plt.plot(shifts * dt, mis)
+                            fig.show()
+                elif button == 2:
+                    self.wsn.num_anchors += 1
+                    if self.wsn.num_anchors > self.wsn.N:
+                        self.wsn.num_anchors = 0
+                    self.wsn.reset_anchors()
+                    self.wsn_area.clear_nodes()
+                    self.wsn_area.set_nodes(self.wsn.nodes, self.wsn.anchor_nodes)
+        elif self.mouse_move_fn_target:
+            # start_frame = int(40 / mtin.default_fn_equ_params["dt"])
+            start_frame = len(mtin.default_fn_sol) - len(mtin.default_fn_sol) // 3
+            if "circular_stim" in mtin.default_fn_equ_params and mtin.default_fn_equ_params["circular_stim"]:
+                r0 = np.array(mtin.default_fn_equ_params["stim"][0][1])
+            else:
+                r0 = np.array([
+                    (mtin.default_fn_equ_params["stim"][0][1][1] + 
+                     mtin.default_fn_equ_params["stim"][0][1][0]) / 2,
+                    (mtin.default_fn_equ_params["stim"][0][2][1] + 
+                     mtin.default_fn_equ_params["stim"][0][2][0]) / 2
+                ])
+            if len(self.fn_signal_plots) == 0:
                 plt.ion()
-                fig = plt.figure("Signal Values")
-                data: np.ndarray = mtin.default_fn_sol[:, 0, x // zoom, y // zoom]
-                T = len(data)
-                plt.plot(np.linspace(0, T, T, endpoint=False) * dt, data)
-                fig.show()
+                min = mtin.default_fn_sol[:, 0, :, :].min()
+                max = mtin.default_fn_sol[:, 0, :, :].max()
+                fig = plt.figure("Signals", figsize=(4, 4))
+                self.fn_signal_plots = [
+                    (
+                        ax.plot(
+                            range(len(mtin.default_fn_sol) - start_frame),
+                            [0 for _ in range(len(mtin.default_fn_sol) - start_frame)]
+                        ),
+                        ax.plot(
+                            range(len(mtin.default_fn_sol) - start_frame),
+                            [0 for _ in range(len(mtin.default_fn_sol) - start_frame)]
+                        ),
+                        ax.set_ylim((min, max)),
+                        ax.set_xlabel(f"sig{i}")
+                    )[:2]
+                    for i, ax in enumerate((
+                        fig.add_subplot(4, 3, i+1)
+                        for i in range(len(self.wsn.nodes))
+                    ))
+                ]
+            for i, plots in enumerate(self.fn_signal_plots):
+                btn_i = 1 if button == 3 else 0
+                node = self.wsn.nodes[i]
+                xy: np.ndarray = np.array([event.x, event.y]) / zoom - r0 + node
+                x, y = xy.astype(np.int32)
 
-                if self.wsn.N >= 2:
-                    # Show mis if there are two graphs
-                    max_tau = 200
-                    shifts = np.arange(-max_tau, max_tau, 1)
-                    xp, yp = self.wsn.nodes[-2].astype(np.int32)
-                    sigp: np.ndarray = mtin.default_fn_sol[:, 0, xp, yp]
-                    mis = mtin.mi_shift(np.transpose([sigp, data]), shifts, dt=dt)
-                    peaks, properties = find_peaks(mis, height=0)
-                    print(shifts[peaks] * dt)
-                    peak = shifts[peaks[np.argmax(properties["peak_heights"])]] * dt
-                    c = 1.6424885622140555
-                    center = np.array([55, 55])
-                    real_dt = (dist(node, center) - dist(self.wsn.nodes[-2], center)) / c
-                    print(peak, real_dt)
+                sigi = mtin.default_fn_sol[start_frame:, 0, x, y]
+                plots[btn_i][0].set_ydata(sigi)
 
-                    fig = plt.figure("MIs")
-                    plt.plot(shifts * dt, mis)
-                    fig.show()
-        elif button == 2:
-            self.wsn.num_anchors += 1
-            if self.wsn.num_anchors > self.wsn.N:
-                self.wsn.num_anchors = 0
-            self.wsn.reset_anchors()
-            self.wsn_area.clear_nodes()
-            self.wsn_area.set_nodes(self.wsn.nodes, self.wsn.anchor_nodes)
-
+            xy = np.array([event.x, event.y]) / zoom
+            if len(self.mouse_fn_target_poss) < 2:
+                self.mouse_fn_target_poss.append(xy)
+            else:
+                self.mouse_fn_target_poss[btn_i] = xy
+            self.wsn_area.clear_other_values()
+            self.wsn_area.set_other_values(self.mouse_fn_target_poss)
 
 
     def show(self):
@@ -204,10 +277,17 @@ class App:
         zoom = 5
         self.wsn_area = WSNAreaWidget(self.root, 100 * zoom, 100 * zoom, zoom=zoom)
         self.wsn_area.grid(row=0, column=0, columnspan=7)
-        self.wsn_area.bind("<Button-1>", lambda event: self.mouse_click_event(event, 1))
-        self.wsn_area.bind("<Button-2>", lambda event: self.mouse_click_event(event, 2))
-        self.wsn_area.bind("<Button-3>", lambda event: self.mouse_click_event(event, 3))
+        self.wsn_area.bind("<Button-1>", lambda event: self.mouse_click_event(event, 1, dragged=False))
+        self.wsn_area.bind("<Button-2>", lambda event: self.mouse_click_event(event, 2, dragged=False))
+        self.wsn_area.bind("<Button-3>", lambda event: self.mouse_click_event(event, 3, dragged=False))
+        self.wsn_area.bind("<B1-Motion>", lambda event: self.mouse_click_event(event, 1, dragged=True))
+        self.wsn_area.bind("<B2-Motion>", lambda event: self.mouse_click_event(event, 2, dragged=True))
+        self.wsn_area.bind("<B3-Motion>", lambda event: self.mouse_click_event(event, 3, dragged=True))
+        self.mouse_add_node = False
         self.signal_views = False
+        self.mouse_move_fn_target = False
+        self.mouse_fn_target_poss = []
+        self.fn_signal_plots = []
 
         big_w = 11
         big_h = 3
@@ -215,7 +295,8 @@ class App:
         button_rows = [
             [
                 ("Reset Nodes", self.reset_nodes),
-                ("Reset Clusters", self.reset_clusters),
+                # ("Reset Clusters", self.reset_clusters),
+                ("Reset Nodes\nBounding Box", lambda: self.reset_nodes_bounding_box((25, 25, 75, 75))),
                 ("Clear Nodes", self.clear_nodes),
                 ("Set FN BG", self.show_fn_solution),
                 # ("Localize TOA", lambda: self.localize("TOA")),
@@ -223,9 +304,11 @@ class App:
                 # ("Localize\ntmTDOA", lambda: self.localize("tmTDOA")),
                 # ("Localize\nSingle TDOA\nOsc", lambda: self.localize_single_continuous(method="TDOA", signal_type="osc")),
                 # ("Test TDOA\nvs continuous\nOsc", lambda: self.test_TDOA_vs_continuous(method="TDOA", signal_type="osc")),
-                ("Localize\nSingle cTDOA\nFN", lambda: self.localize_single_continuous(method="cTDOA", signal_type="fn")),
-                ("Localize\nSingle mTDOA\nFN", lambda: self.localize_single_continuous(method="mTDOA", signal_type="fn")),
-                ("Start signal\nviews", self.start_signal_views)
+                # ("Localize\nSingle cTDOA\nFN", lambda: self.localize_single_continuous(method="cTDOA", signal_type="fn")),
+                # ("Localize\nSingle mTDOA\nFN", lambda: self.localize_single_continuous(method="mTDOA", signal_type="fn")),
+                # ("Start signal\nviews", self.start_signal_views),
+                ("Start mouse\nfn target", self.start_mouse_fn_target),
+                ("Start mouse\nadd node", self.start_mouse_add_node),
                 # ("Test TDOA\nvs continuous\nFN", lambda: self.test_TDOA_vs_continuous(method="mTDOA", signal_type="fn")),
             ]
         ]
@@ -242,10 +325,10 @@ class App:
 
         option_columns = [
             [
-                # ("N", 0, 100, 5),
-                # ("num_anchors", 0, 10, 4),
-                ("cluster_size", 1, 10, 3),
-                ("num_clusters", 1, 10, 3),
+                ("N", 0, 100, 5),
+                ("num_anchors", 0, 10, 4),
+                # ("cluster_size", 1, 10, 3),
+                # ("num_clusters", 1, 10, 3),
                 ("D", 0, 142, 142),
                 ("dt", 1, 500, 100, 1, 0.0001),
             ],
