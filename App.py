@@ -1,4 +1,5 @@
 from tkinter import *
+from matplotlib import pyplot as plt
 
 from WSN import *
 from WSNAreaWidget import WSNAreaWidget
@@ -139,6 +140,12 @@ class App:
         print()
 
     def show_fn_solution(self):
+        mtin.default_fn_equ_params.update({
+            'T': 1000,
+            'circular_stim': True,
+            'stim': [[[25, 40], [55, 55], 10]],
+        })
+        mtin.default_fn_equ = mtin.FHN(**mtin.default_fn_equ_params)
         mtin.solve_default_fn_equ()
         width, height = self.wsn_area.width, self.wsn_area.height
         frame_to_show = 300
@@ -195,7 +202,7 @@ class App:
                             xp, yp = self.wsn.nodes[-2].astype(np.int32)
                             sigp: np.ndarray = mtin.default_fn_sol[:, 0, xp, yp]
                             mis = mtin.mi_shift(np.transpose([sigp, data]), shifts, dt=dt)
-                            peaks, properties = find_peaks(mis, height=0)
+                            peaks, properties = mtin.find_peaks(mis, height=0)
                             print(shifts[peaks] * dt)
                             peak = shifts[peaks[np.argmax(properties["peak_heights"])]] * dt
                             c = 1.6424885622140555
@@ -295,8 +302,8 @@ class App:
         button_rows = [
             [
                 ("Reset Nodes", self.reset_nodes),
-                # ("Reset Clusters", self.reset_clusters),
-                ("Reset Nodes\nBounding Box", lambda: self.reset_nodes_bounding_box((25, 25, 75, 75))),
+                ("Reset Clusters", self.reset_clusters),
+                # ("Reset Nodes\nBounding Box", lambda: self.reset_nodes_bounding_box((25, 25, 75, 75))),
                 ("Clear Nodes", self.clear_nodes),
                 ("Set FN BG", self.show_fn_solution),
                 # ("Localize TOA", lambda: self.localize("TOA")),

@@ -19,10 +19,12 @@ class WSNAreaWidget(Canvas):
         self._other_val_elements = []
         self._bounding_box = None
 
+        self.node_stroke_width = 3
+
         self.default_color = "black"
         self.default_color_with_bg = "red"
         self.other_value_color = "orange"
-        self.anchor_color ="blue"
+        self.anchor_color ="#ffa200"
 
 
     def set_bg_image(self, image):
@@ -57,7 +59,8 @@ class WSNAreaWidget(Canvas):
                     fill="",
                     outline=
                         (self.default_color_with_bg if self._bg_image is not None else self.default_color)
-                        if i not in anchor_nodes else self.anchor_color
+                        if i not in anchor_nodes else self.anchor_color,
+                    width=self.node_stroke_width
                 )
             )
 
@@ -76,14 +79,16 @@ class WSNAreaWidget(Canvas):
                         pix[1] - self._node_radius,
                         pix[0] + self._node_radius,
                         pix[1] + self._node_radius,
-                        fill=color
+                        fill=color,
+                        width=self.node_stroke_width
                     ),
                     self.create_line(
                         pix[0] + self._node_radius,
                         pix[1] - self._node_radius,
                         pix[0] - self._node_radius,
                         pix[1] + self._node_radius,
-                        fill=color
+                        fill=color,
+                        width=self.node_stroke_width
                     )
                 )
             )
@@ -106,14 +111,16 @@ class WSNAreaWidget(Canvas):
                         pix[1] - self._node_radius,
                         pix[0] + self._node_radius,
                         pix[1] + self._node_radius,
-                        fill=color
+                        fill=color,
+                        width=self.node_stroke_width
                     ),
                     self.create_line(
                         pix[0] + self._node_radius,
                         pix[1] - self._node_radius,
                         pix[0] - self._node_radius,
                         pix[1] + self._node_radius,
-                        fill=color
+                        fill=color,
+                        width=self.node_stroke_width
                     )
                 )
             )
